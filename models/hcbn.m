@@ -585,6 +585,44 @@ classdef hcbn < handle
             conditionalProb = jointProbAllNodes/jointProbParentNodes;
         end
         
+        function [ ll_proxy_val ] = dataLogLikelihood_proxy(obj)
+            % Computes a Proxy for the log-likelihood!  From the paper:
+            % Speedy Model Selection for CBN's by Tenzer & Elidan:
+            %  https://arxiv.org/abs/1309.6867
+            % we know that we can use any DPI satisfying measure as a proxy
+            % to log-likelihood.  This includes CIM (for continuous
+            % networks), CIM_S (for hybrid networks), tau, srho (for
+            % continuous networks), and tau_s (for hybrid networks)
+            
+            % WARNING!! - Should only be used with DAG's that are limited
+            % to nodes w/ only 1 parent (K=1).
+            
+            % For each node, find its parent, and compute the likelihood
+            % proxy
+            ll_proxy_val = 0;
+            for dd=1:obj.D
+                parentIdx = obj.getParents(dd);
+                if(~isempty(parentIdx))
+                    if(length(parentIdx)>1)
+                        error('Not a Tree w/ 1 parent!!');
+                    else
+                        dataX = obj.X_xform(:,dd);
+                        dataY = obj.X_xform(:,parentIdx);
+                        
+                        % compute the proxy to Likelihood.  Because we are
+                        % using the X_xform dataset, we know that if the
+                        % data is continuous, we will compute CIM and if
+                        % the data is hybrid or discrete, we will
+                        % automatically compute CIM_S, which was shown in
+                        % the paper: https://arxiv.org/abs/1703.06686 to
+                        % satisfy DPI
+                        cimVal = cim(dataX, dataY);
+                        ll_proxy_val = ll_proxy_val + cimVal;
+                    end
+                end
+            end
+        end
+        
         function [ ll_val, totalProbVec ] = dataLogLikelihood(obj, X)
             M = size(X,1);
             if(size(X,2)~=obj.D)

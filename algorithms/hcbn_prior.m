@@ -2,16 +2,16 @@ function [p_prior] = hcbn_prior(model, rho_s)
 
 if(strcmpi(model,'Gaussian'))
     param = copulaparam('Gaussian',rho_s,'type','Spearman');
-    % generate a truncated Normal distribution
+    % generate a truncated Normal distribution to approximate the Laplacian
     % FYI - SMS paper, they use a Laplacian distribution ... 
-    pd = makedist('Normal');
+    pd = makedist('Normal',0,.1);
     pd = truncate(pd,-1,1);
 elseif(strcmpi(model,'Gumbel'))
     param = copulaparam('Gumbel',rho_s,'type','Spearman');
     % Generate shifted by Unity Exponential
-    pd = makedist('Exponential','mu',4);
+    pd = makedist('Exponential','mu',.1);
     % approximate the shift by truncating from 1 - 1000
-    pd = truncate(pd,1,1000);
+    pd = truncate(pd,1,Inf);
 elseif(strcmpi(model,'Clayton'))
     param = copulaparam('Clayton',rho_s,'type','Spearman');
     % Generate Exponential w/ lambda=4
