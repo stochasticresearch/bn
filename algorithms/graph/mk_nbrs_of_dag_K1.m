@@ -21,10 +21,13 @@ for e=1:length(I)
   i = I(e); j = J(e);
   G = G0;
   G(i,j) = 0;
-  Gs{nnbrs} = G;
-  op{nnbrs} = 'del';
-  nodes(nnbrs, :) = [i j];
-  nnbrs = nnbrs + 1;
+  
+  if(~isGraphDegG1(G))
+    Gs{nnbrs} = G;
+    op{nnbrs} = 'del';
+    nodes(nnbrs, :) = [i j];
+    nnbrs = nnbrs + 1;
+  end
 end
 
 % all single edge reversals
@@ -33,7 +36,7 @@ for e=1:length(I)
   G = G0;
   G(i,j) = 0;
   G(j,i) = 1;
-  if acyclic(G)
+  if (acyclic(G) && ~isGraphDegG1(G))
     Gs{nnbrs} = G;
     op{nnbrs} = 'rev';
     nodes(nnbrs, :) = [i j];
@@ -49,12 +52,13 @@ for e=1:length(I)
     G = G0;
     G(i,j) = 1;
     if G(j,i)==0 % don't add i->j if j->i exists already
-      if acyclic(G)
-	Gs{nnbrs} = G;
-	op{nnbrs} = 'add';
-	nodes(nnbrs, :) = [i j];
-	nnbrs = nnbrs + 1;
+      if (acyclic(G) && ~isGraphDegG1(G))
+        Gs{nnbrs} = G;
+        op{nnbrs} = 'add';
+        nodes(nnbrs, :) = [i j];
+        nnbrs = nnbrs + 1;
       end
     end
   end
+end
 end

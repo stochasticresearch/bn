@@ -34,8 +34,12 @@ function [] = learnstruct_hc_llproxy(dagModelObj, seeddag)
 %* 
 %**************************************************************************
 
+if(nargin<2)
+    seeddag = [];
+end
+
 % ensure that the seeddag is acyclic
-if(~acyclic(seeddag))
+if(isempty(seeddag) || ~acyclic(seeddag))
     warning('Specified seeddag is NOT acyclic!');
 	dagModelObj.setDag(zeros(dagModelObj.D,dagModelObj.D));
 else
