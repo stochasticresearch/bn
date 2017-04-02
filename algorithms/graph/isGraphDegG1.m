@@ -28,7 +28,7 @@ function val = isGraphDegG1(G)
 
 indeg = sum(G,1);
 outdeg = sum(G,2);
-if(any(indeg)>1 || any(outdeg)>1)
+if(any(indeg>1) || any(outdeg>1))
     val = 1;
 else
     val = 0;

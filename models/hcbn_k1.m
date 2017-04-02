@@ -121,9 +121,12 @@ classdef hcbn_k1 < handle
                 if(ischar(varargin{1}))
                     % assume it is just a flag and we attempt to perform
                     % speedy structure learning
-                    fprintf('Performing Structure Learning!');
-                    learnstruct_hc_llproxy(obj);
-                    fprintf('Structure Learning complete!');
+                    if(nVarargs>1)
+                        arg2 = varargin{2};
+                    else
+                        arg2 = 0;
+                    end
+                    learnstruct_hc_llproxy(obj, [], arg2);
                 else
                     candidateDag = varargin{1};
                     if(~acyclic(candidateDag) || isGraphDegG1(candidateDag))
@@ -133,7 +136,8 @@ classdef hcbn_k1 < handle
                     if(size(candidateDag,1)~=size(candidateDag,2) || size(candidateDag,1)~=obj.D)
                         error('DAG must be a square matrix of size D!');
                     end
-                    obj.setDag(candidateDag);       % estimate the copula families
+                    estimateCop = 1;
+                    obj.setDag(candidateDag, estimateCop);       % estimate the copula families
                 end
             end
         end
@@ -194,9 +198,11 @@ classdef hcbn_k1 < handle
             end
         end
         
-        function [] = setDag(obj, candidateDag)
+        function [] = setDag(obj, candidateDag, estimateCop)
             obj.dag = candidateDag;
-            obj.estFamilyCopula();
+            if(estimateCop)
+                obj.estFamilyCopula();
+            end
         end
         
         function [] = estFamilyCopula(obj)
@@ -328,12 +334,14 @@ classdef hcbn_k1 < handle
                 mixedProbability = 0;
                 for ii=1:size(rectangleDiffStates,1)
                     rectangleDiffState = rectangleDiffStates(ii,:);
-                    diffStateIdx = 1;
-                    for diffState=rectangleDiffState
-                        discreteIdx = discreteIdxs(diffStateIdx);
-                        discreteNodeNum = idxs(discreteIdx);
-                        u(discreteIdx) = obj.empInfo{discreteNodeNum}.cdf(X(discreteNodeNum)-diffState);
-                        diffStateIdx = diffStateIdx + 1;
+                    if(~isempty(discreteIdxs))
+                        diffStateIdx = 1;
+                        for diffState=rectangleDiffState
+                            discreteIdx = discreteIdxs(diffStateIdx);
+                            discreteNodeNum = idxs(discreteIdx);
+                            u(discreteIdx) = obj.empInfo{discreteNodeNum}.cdf(X(discreteNodeNum)-diffState);
+                            diffStateIdx = diffStateIdx + 1;
+                        end
                     end
                     if(parentsFlag)
                         tmp = (-1)^(sum(rectangleDiffState))*empcopulaval(obj.copulaFamilies{nodeNum}.C_parents_discrete_integrate, u, 1/obj.K);
@@ -390,8 +398,9 @@ classdef hcbn_k1 < handle
                         % automatically compute CIM_S, which was shown in
                         % the paper: https://arxiv.org/abs/1703.06686 to
                         % satisfy DPI
-                        cim_S_Val = cim(dataX, dataY);
-                        ll_proxy_val = ll_proxy_val + cim_S_Val;
+                        %score_proxy = cim(dataX, dataY);
+                        score_proxy = abs(corr(dataX,dataY,'type','Spearman'));
+                        ll_proxy_val = ll_proxy_val + score_proxy;
                     end
                 end
             end

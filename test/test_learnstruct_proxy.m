@@ -18,12 +18,22 @@
 %**************************************************************************
 clear;
 clc;
+dbstop if error;
 
 % Read in a data-set
 dataFolder = '/Users/kiran/Documents/data/wine_quality';
 redWineDataFile = fullfile(dataFolder, 'winequality-red.csv');
 
 % ensure dataset is all numeric, and convert categorical data to numeric
-data = importdata(redWineDataFile,';');
+x = importdata(redWineDataFile,';');
 
 % learn structure
+discreteNodes = [];
+K = 100;
+verboseFlag = 1;
+
+hcbnObj = hcbn_k1(x.data, x.colheaders, [], K, 'learn', verboseFlag);
+
+% now -- compute the likelihood of the model, given the data
+totalLL = hcbnObj.dataLogLikelihood(x.data);
+fprintf('Total LL=%0.02f\n', totalLL);
