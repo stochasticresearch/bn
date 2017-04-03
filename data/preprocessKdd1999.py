@@ -69,9 +69,13 @@ def preprocess(inFile,outFile):
     for col in colsToTransform:
         x[col], label_mapping[col] = pd.factorize(x[col].astype('category'))
 
-    # write the data back out
+    # write the data back out after randomely sampling, b/c we have a
+    # TON of data, and don't want to spend forever processing this data
+    y_train = x.sample(n=5000, replace=False)
+    y_test =  x.sample(n=5000, replace=False)
     print('Writing Data')
-    x.to_csv(outFile)
+    y_train.to_csv(outFile + '.train')
+    y_test.to_csv(outFile + '.test')
 
     f = open(outFile+'.mapping','wb')
     w = csv.DictWriter(f,label_mapping.keys())
@@ -81,5 +85,5 @@ def preprocess(inFile,outFile):
 
 if __name__=='__main__':
     inFile = '/Users/kiran/Documents/data/kdd1999/kddcup.data'
-    outFile = '/Users/kiran/Documents/data/kdd1999/kddcup.process.data'
+    outFile = '/Users/kiran/Documents/data/kdd1999/kddcup.preprocess.data'
     preprocess(inFile,outFile)
