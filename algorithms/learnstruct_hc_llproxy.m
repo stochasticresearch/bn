@@ -104,6 +104,8 @@ dispstat('Structure Learning complete!','keepthis','timestamp');
 
 % now that structure learning is complete, estimate the copula family
 % objects
+dispstat('Learning Copula Families and Parameters!', 'keepthis', 'timestamp');
 dagModelObj.estFamilyCopula();
+dispstat('Learning complete!', 'keepthis', 'timestamp');
 
 end
