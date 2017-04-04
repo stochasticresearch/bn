@@ -42,14 +42,15 @@ if(nargin<3)
     verboseFlag = 0;
 end
 
-estimateCop = 0;    % we don't need to estimate the copula while structure learning
+estimateCopFlag = 0;    % we don't need to estimate the copula while structure learning
+toposortDagFlag = 0;
 
 % ensure that the seeddag is acyclic
 if(isempty(seeddag) || ~acyclic(seeddag))
     warning('Specified seeddag is NOT acyclic!');
-	dagModelObj.setDag(zeros(dagModelObj.D,dagModelObj.D), estimateCop);
+	dagModelObj.setDag(zeros(dagModelObj.D,dagModelObj.D), estimateCopFlag);
 else
-	dagModelObj.setDag(seeddag, estimateCop);
+	dagModelObj.setDag(seeddag, estimateCopFlag);
 end
 
 % get the baseline score
@@ -68,7 +69,7 @@ while ~done
 	% score all the dags
 	scores = -Inf*ones(1,length(candidateDags));
 	for ii=1:length(candidateDags)
-		dagModelObj.setDag(candidateDags{ii}, estimateCop);
+		dagModelObj.setDag(candidateDags{ii}, estimateCopFlag);
 		scores(ii) = dagModelObj.dataLogLikelihood_proxy();
         if(verboseFlag)
             dispstat(sprintf('%d/%d-Dag Score=%0.02f',ii,length(candidateDags),scores(ii)));
@@ -82,10 +83,10 @@ while ~done
 	% score, and if so, choose randomely among those dag's
 	new = find(scores == maxScore );
 	% update best candidate dag as new dag and continue search
-	if ( ~isempty(new) && (maxScore > bestScore) )
+	if( ~isempty(new) && (maxScore > bestScore) )
 		p = sample_discrete(normalise(ones(1, length(new))));
 		bestScore = maxScore;
-		dagModelObj.setDag(candidateDags{new(p)},estimateCop);
+		dagModelObj.setDag(candidateDags{new(p)},estimateCopFlag);
 	else
 		done = 1;
     end 
@@ -96,11 +97,6 @@ while ~done
     end
 end
 dispstat('Structure Learning complete!','keepthis','timestamp');
-
-% TODO: topo-sort the DAG, and sort the names cell array to
-% match the topologically sorted DAG
-
-% TODO: print out DAG structure
 
 % now that structure learning is complete, estimate the copula family
 % objects

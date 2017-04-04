@@ -28,6 +28,8 @@ classdef hcbn_k1 < handle
                     % to the jth random variable
                     % TODO: consider changing this to a sparse matrix
                     % representation
+        dag_topoSorted; % a topologically sorted verison of the DAG
+        topoOrder;  % ordering of the nodes topologically by index
         nodeNames;  % a cell array of the list of node names  
         nodeVals;   % an array of the topological order of the nodes w.r.t
                     % the DAG
@@ -91,6 +93,7 @@ classdef hcbn_k1 < handle
             obj.empInfo = cell(1,obj.D);
             
             obj.dag = zeros(obj.D,obj.D);
+            obj.dag_topoSorted = [];
             
             obj.K = K;
             
@@ -196,6 +199,10 @@ classdef hcbn_k1 < handle
             for jj=1:length(parentIdxs)
                 parentNames{jj} = obj.nodeNames{parentIdxs(jj)};
             end
+        end
+        
+        function [] = setToposortDag(obj)
+            [obj.topoOrder,~,obj.dag_topoSorted] = topoSort(obj.dag);
         end
         
         function [] = setDag(obj, candidateDag, estimateCop)
@@ -497,6 +504,209 @@ classdef hcbn_k1 < handle
                 % that has atmost in-degree=1 and out-degree=1
                 rcVal = copulapdf(copFam.c_model_name, u_all, copFam.c_model_params);
             end
+        end
+        
+        function [prob] = computePairwiseJoint(obj, childNode, parentNode)
+            % determine if we have continuous, hybrid-1, hybrid-2, or
+            % discrete scenarios
+            childDiscrete = any(childNode==obj.discNodeIdxs);
+            parentDiscrete = any(parentNode==obj.discNodeIdxs);
+            
+            if(~childDiscrete && ~parentDiscrete)
+                probabilityType='all-continuous';
+            elseif(childDiscrete && parentDiscrete)
+                probabilityType='all-discrete';
+            elseif(childDiscrete && ~parentDiscrete)
+                probabilityType='hybrid-1';
+            else
+                probabilityType='hybrid=2';
+            end
+            
+            % retrieve the domain of the child and parent, over which we
+            % will compute the probabilities
+            childObj = obj.empInfo{childNode};
+            parentObj = obj.empInfo{parentNode};
+            copFamilyObj = obj.copulaFamilies{childNode};
+            childDomain = childObj.domain;
+            parentDomain = parentObj.domain;
+            prob = zeros([length(childDomain) length(parentDomain)]);
+            
+            if(strcmpi(probabilityType, 'all-continuous'))
+                % f(x,y) = f(x)*f(y)*c(F(x),F(y))
+                for ii=1:length(childDomain)
+                    xVal = childDomain(ii);
+                    for jj=1:length(parentDomain)
+                        yVal = parentDomain(jj);
+                        uVec = [childObj.cdf(xVal) parentObj.cdf(yVal)];
+                        prob(ii,jj) = childObj.pdf(xVal)*...
+                                      parentObj.pdf(yVal)*...
+                                      copulapdf(copFamilyObj.c_model_name, uVec, copFamilyObj.c_model_params);
+                    end
+                end
+            elseif(strcmpi(probabilityType, 'all-discrete'))
+                % f(x,y) = sum(sum( [(-1)^(i+j) C(u_i,v_j)], 1, 2), 1, 2)
+                %  u_1 = F(x-), u_2 = F(x)
+                %  v_1 = F(y-), v_2 = F(y)
+                
+                % !!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!
+                % Compare integration of c to C, with querying C directly!
+                % Recommend changing so that in a k1family, if we know both
+                % nodes are discrete we store that info somehow so that we
+                % can just call 
+                % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                for ii=1:length(childDomain)
+                    xVal = childDomain(ii);
+                    for jj=1:length(parentDomain)
+                        yVal = parentDomain(jj);
+                        if(ii==1)
+                            u1 = 0;
+                        else
+                            u1 = childObj.cdf(childDomain(ii-1));
+                        end
+                        u2 = childObj.cdf(xVal);
+                        
+                        if(jj==1)
+                            v1 = 0;
+                        else
+                            v1 = parentObj.cdf(parentDomain(jj-1));
+                        end
+                        v2 = parentObj.cdf(yVal);
+                        % compute the C-Volume
+                        prob(ii,jj) = empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v2]) - ...
+                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v1]) - ...
+                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v2]) + ...
+                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v1]);
+                    end
+                end
+                
+            elseif(strcmpi(probabilityType, 'hybrid-1'))
+                % f(x,y) = sum( [(-1)^(i+j) C(u_i,F(y))], 1, 2) * f(y)
+                %  u_1 = F(x-), u_2 = F(x)
+                for ii=1:length(childDomain)
+                    xVal = childDomain(ii);
+                    for jj=1:length(parentDomain)
+                        yVal = parentDomain(jj);
+                        if(ii==1)
+                            u1 = 0;
+                        else
+                            u1 = childObj.cdf(childDomain(ii-1));
+                        end
+                        u2 = childObj.cdf(xVal);
+                        v = parentObj.cdf(yVal);
+                        prob(ii,jj) = parentObj.pdf(yVal)*...
+                                      (empcopulaval(copFamilyObj.C_discrete_integrate, [u2, v]) - ...
+                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u1, v]) );
+                    end
+                end
+            else
+                % f(x,y) = sum( [(-1)^(i+j) C(F(x),v_i)], 1, 2) * f(x)
+                %  v_1 = F(y-), v_2 = F(y)
+                for ii=1:length(childDomain)
+                    xVal = childDomain(ii);
+                    for jj=1:length(parentDomain)
+                        yVal = parentDomain(jj);
+                        if(jj==1)
+                            v1 = 0;
+                        else
+                            v1 = parentObj.cdf(parentDomain(jj-1));
+                        end
+                        v2 = parentObj.cdf(yVal);
+                        u = childObj.cdf(xVal);
+                        prob(ii,jj) = childObj.pdf(xVal)*...
+                                      (empcopulaval(copFamilyObj.C_discrete_integrate, [u, v2]) - ...
+                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u, v1]) );
+                    end
+                end
+            end
+        end
+        
+        function [prob] = inference(obj, requestedNodes, givenNodes)
+            % Performs inference on the HCBN, given a certain number of
+            % nodes for the requested nodes.  Requested Nodes and Given
+            % Nodes can both be provided as either indices, or names.
+            if(isempty(obj.dag_topoSorted))
+                obj.setToposortDag();
+            end
+            % determine whether we have indices or we need to get the
+            % indices of the requested/given nodes
+            if(iscell(requestedNodes))
+                requestedNodesIdx = zeros(1,length(requestedNodes));
+                for ii=1:length(requestedNodes)
+                    for jj=1:obj.D
+                        nodeName = obj.nodeNames{jj};
+                        if(isequal(requestedNodes{ii},nodeName))
+                            requestedNodesIdx(ii) = jj;
+                            break;
+                        end
+                    end
+                end
+            else
+                requestedNodesIdx = requestedNodes;
+            end
+            if(iscell(givenNodes))
+                givenNodesIdx = zeros(1,length(requestedNodes));
+                for ii=1:length(givenNodesIdx)
+                    for jj=1:obj.D
+                        nodeName = obj.nodeNames{jj};
+                        if(isequal(givenNodes{ii},nodeName))
+                            givenNodesIdx(ii) = jj;
+                            break;
+                        end
+                    end
+                end
+            else
+                givenNodesIdx = givenNodes;
+            end
+            
+            % find which nodes we will need to compute the probability over
+            reqNodesTopoOrderVec = zeros(1,length(requestedNodesIdx));
+            for ii=1:length(requestedNodesIdx)
+                reqNodesTopoOrderVec(ii) = find(obj.topoOrder==requestedNodesIdx(ii));
+            end
+            givenNodesTopoOrderVec = zeros(1,length(givenNodesIdx));
+            for ii=1:length(requestedNodesIdx)
+                givenNodesTopoOrderVec(ii) = find(obj.topoOrder==givenNodesIdx(ii));
+            end
+            minReq = min(reqNodesTopoOrderVec);
+            maxReq = max(reqNodesTopoOrderVec);
+            minGiv = min(givenNodesTopoOrderVec);
+            maxGiv = max(givenNodesTopoOrderVec);
+            
+            minNode = min(minReq,minGiv);
+            maxNode = max(maxReq,maxGiv);
+            
+            % we use these indices to get access to the correct
+            % probabilities in the copula family and the marginal
+            % probabilities
+            minNodeIdx = obj.topoOrder(minNode);
+            maxNodeIdx = obj.topoOrder(maxNode);
+            numNodes = maxNode-minNode+1;
+            
+            szArr = zeros(1,numNodes);
+            dagChainVec = zeros(1,numNodes);
+            % make the DAG chain & get create the tensor dimensions
+            dagChainVec(1) = minNodeIdx;
+            szArr(1) = length(obj.empInfo{minNodeIdx}.domain);
+            for ii=2:numNodes
+                dagChainVec(ii) = find(obj.dag(dagChainVec(ii-1),:));
+                szArr(ii) = length(obj.empInfo{minNodeIdx}.domain);
+            end
+            numPairwiseProbsToCompute = length(dagChainvec)-1;
+            
+            fullJointProbTensor = zeros(szArr);
+            pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
+            % compute pairwise joint probabilities
+            for ii=1:numPairwiseProbsToCompute
+                childNode = dagChainVec(ii+1);
+                parentNode = dagChainVec(ii);
+                pairwiseJointProbsCell{ii} = obj.computePairwiseJoint(childNode, parentNode);
+            end
+            
+            % merge into the overall joint
+            
+            % integrate out nuisance variables
+            
+            
         end
         
     end

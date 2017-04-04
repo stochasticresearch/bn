@@ -116,6 +116,18 @@ def preprocess(inFile,outFile):
     f.close()
 
 if __name__=='__main__':
-    inFile = '/Users/kiran/Documents/data/kdd1999/kddcup.data'
-    outFile = '/Users/kiran/Documents/data/kdd1999/kddcup.preprocess.data'
-    preprocess(inFile,outFile)
+    import platform
+    import os
+
+    if(platform.system()=='Linux'):
+        folder = ''
+    elif(platform.system()=='Darwin'):
+        folder = '/Users/kiran/Documents/data/kdd1999/'
+    elif(platform.system()=='Windows'):
+        folder = 'C:\\Users\\Kiran\\Documents\\data\\kdd1999'
+    inFile = 'kddcup.data'
+    outFile = 'kddcup.preprocess.data'
+
+    inFileWithPath = os.path.join(folder, inFile)
+    outFileWithPath = os.path.join(folder, outFile)
+    preprocess(inFileWithPath,outFileWithPath)

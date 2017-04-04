@@ -65,7 +65,7 @@ colheaders = x_train.colheaders(2:end);
 K = 100;
 verboseFlag = 1;
 
-hcbnObj = hcbn_k1(train_data, colheaders, [], K, 'learn', verboseFlag);
+hcbnObj = hcbn_k1(train_data, colheaders, discreteIdxs, K, 'learn', verboseFlag);
 
 % save the learned DAG
 save(dag_file);
@@ -73,6 +73,8 @@ save(dag_file);
 %% KDD-1999 Testing
 clear;
 clc;
+close all;
+dbstop if error;
 
 dataFolder = '/Users/kiran/Documents/data/kdd1999';
 dag_file = fullfile(dataFolder, 'kddcup.learned.dag.mat');
@@ -83,8 +85,16 @@ load(dag_file);
 
 % try to plot the grpah
 bg = biograph(hcbnObj.dag,colnames);
+dolayout(bg);
 view(bg)
 
 % % % now -- compute the likelihood of the model, given the data
 % % totalLL = hcbnObj.dataLogLikelihood(test_data);
 % % fprintf('Total LL=%0.02f\n', totalLL);
+
+% test out the application of the topological ordering 
+%requestedNodes = {colnames{3}, colnames{4}}
+%givenNodes = {colnames{6}, colnames{8}}
+requestedNodes = {'flag'}
+givenNodes = {'srv_serror_rate'}
+hcbnObj.inference(requestedNodes, givenNodes)
