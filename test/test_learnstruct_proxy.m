@@ -62,7 +62,7 @@ test_data  = x_test.data(:,2:end);
 discreteIdxs = importdata(discreteIdxsFile)' + 1;   % +1 to reindex w/ python
                                                
 colheaders = x_train.colheaders(2:end);
-K = 100;
+K = 25;
 verboseFlag = 1;
 
 hcbnObj = hcbn_k1(train_data, colheaders, discreteIdxs, K, 'learn', verboseFlag);
@@ -83,10 +83,10 @@ colnames = importdata(colnames_file)';
 
 load(dag_file);
 
-% try to plot the grpah
-bg = biograph(hcbnObj.dag,colnames);
-dolayout(bg);
-view(bg)
+% plot the grpah
+% bg = biograph(hcbnObj.dag,colnames);
+% dolayout(bg);
+% view(bg)
 
 % % % now -- compute the likelihood of the model, given the data
 % % totalLL = hcbnObj.dataLogLikelihood(test_data);
@@ -97,4 +97,5 @@ view(bg)
 %givenNodes = {colnames{6}, colnames{8}}
 requestedNodes = {'flag'}
 givenNodes = {'srv_serror_rate'}
-hcbnObj.inference(requestedNodes, givenNodes)
+givenValues = [1];
+hcbnObj.inference(requestedNodes, givenNodes, givenValues)

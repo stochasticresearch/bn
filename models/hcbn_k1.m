@@ -158,8 +158,8 @@ classdef hcbn_k1 < handle
                 if(any(obj.discNodeIdxs==ii))
                     isdiscrete = 1;
                 end
-                [F,x] = empcdf(obj.X(:,ii), isdiscrete);
-                f = emppdf(obj.X(:,ii), isdiscrete);
+                [F,x] = empcdf(obj.X(:,ii), isdiscrete, obj.K);
+                f = emppdf(obj.X(:,ii), isdiscrete, obj.K);
                 empInfoObj = rvEmpiricalInfo(x, f, F, isdiscrete);
                 obj.empInfo{ii} = empInfoObj;
             end
@@ -620,7 +620,7 @@ classdef hcbn_k1 < handle
             end
         end
         
-        function [prob] = inference(obj, requestedNodes, givenNodes)
+        function [prob] = inference(obj, requestedNodes, givenNodes, givenVals)
             % Performs inference on the HCBN, given a certain number of
             % nodes for the requested nodes.  Requested Nodes and Given
             % Nodes can both be provided as either indices, or names.
@@ -630,42 +630,42 @@ classdef hcbn_k1 < handle
             % determine whether we have indices or we need to get the
             % indices of the requested/given nodes
             if(iscell(requestedNodes))
-                requestedNodesIdx = zeros(1,length(requestedNodes));
+                requestedNodesIdxs = zeros(1,length(requestedNodes));
                 for ii=1:length(requestedNodes)
                     for jj=1:obj.D
                         nodeName = obj.nodeNames{jj};
                         if(isequal(requestedNodes{ii},nodeName))
-                            requestedNodesIdx(ii) = jj;
+                            requestedNodesIdxs(ii) = jj;
                             break;
                         end
                     end
                 end
             else
-                requestedNodesIdx = requestedNodes;
+                requestedNodesIdxs = requestedNodes;
             end
             if(iscell(givenNodes))
-                givenNodesIdx = zeros(1,length(requestedNodes));
-                for ii=1:length(givenNodesIdx)
+                givenNodesIdxs = zeros(1,length(requestedNodes));
+                for ii=1:length(givenNodesIdxs)
                     for jj=1:obj.D
                         nodeName = obj.nodeNames{jj};
                         if(isequal(givenNodes{ii},nodeName))
-                            givenNodesIdx(ii) = jj;
+                            givenNodesIdxs(ii) = jj;
                             break;
                         end
                     end
                 end
             else
-                givenNodesIdx = givenNodes;
+                givenNodesIdxs = givenNodes;
             end
             
             % find which nodes we will need to compute the probability over
-            reqNodesTopoOrderVec = zeros(1,length(requestedNodesIdx));
-            for ii=1:length(requestedNodesIdx)
-                reqNodesTopoOrderVec(ii) = find(obj.topoOrder==requestedNodesIdx(ii));
+            reqNodesTopoOrderVec = zeros(1,length(requestedNodesIdxs));
+            for ii=1:length(requestedNodesIdxs)
+                reqNodesTopoOrderVec(ii) = find(obj.topoOrder==requestedNodesIdxs(ii));
             end
-            givenNodesTopoOrderVec = zeros(1,length(givenNodesIdx));
-            for ii=1:length(requestedNodesIdx)
-                givenNodesTopoOrderVec(ii) = find(obj.topoOrder==givenNodesIdx(ii));
+            givenNodesTopoOrderVec = zeros(1,length(givenNodesIdxs));
+            for ii=1:length(requestedNodesIdxs)
+                givenNodesTopoOrderVec(ii) = find(obj.topoOrder==givenNodesIdxs(ii));
             end
             minReq = min(reqNodesTopoOrderVec);
             maxReq = max(reqNodesTopoOrderVec);
@@ -689,9 +689,9 @@ classdef hcbn_k1 < handle
             szArr(1) = length(obj.empInfo{minNodeIdx}.domain);
             for ii=2:numNodes
                 dagChainVec(ii) = find(obj.dag(dagChainVec(ii-1),:));
-                szArr(ii) = length(obj.empInfo{minNodeIdx}.domain);
+                szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
             end
-            numPairwiseProbsToCompute = length(dagChainvec)-1;
+            numPairwiseProbsToCompute = length(dagChainVec)-1;
             
             fullJointProbTensor = zeros(szArr);
             pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
@@ -702,11 +702,68 @@ classdef hcbn_k1 < handle
                 pairwiseJointProbsCell{ii} = obj.computePairwiseJoint(childNode, parentNode);
             end
             
-            % merge into the overall joint
+            % compute overall joint
+            % TODO: is there a more efficient way to do this w/ matrix
+            % operations?  I would think so ...
+            idxsOutput = cell(1,numel(szArr));
+            for ii=1:prod(szArr)
+                [idxsOutput{:}] = ind2sub(szArr,ii);
+                idxsMat = cell2mat(idxsOutput);
+                prob = 1;
+                for jj=1:numPairwiseProbsToCompute
+                    pairwiseJoint = pairwiseJointProbsCell{jj};
+                    accessIdx = idxsMat(jj,jj+1);
+                    prob = prob*pairwiseJoint(accessIdx(1),accessIdx(2));
+                end
+                fullJointProbTensor(ii) = prob;
+            end
+            
+            % apply the given variables
+            outputTensor = fullJointProbTensor;
+            for ii=1:length(givenNodesIdxs)
+                givenNodeIdx = givenNodesIdxs(ii);
+                givenNodeVal = givenVals(ii);
+                % find ii in the dag-chain vec to determine which index in
+                % our fullJoint we need to access .. this determines which
+                % of the (:,:,:,...:) into which we need to put a specific
+                % number is
+                fullJointSliceDim = find(dagChainVec==givenNodeIdx);
+                
+                % find which index coresponds to the given value 
+                % this determines what the number is that we need to put
+                % into the indexing
+                withinSliceIdx = obj.empInfo{givenNodeIdx}.findClosestDomainVal(givenNodeVal);
+                
+                %%%%%%% EXAMPLE %%%%%
+                % suppose fullJointProbTensor = [25 x 25 x 25 x 25]
+                % fullJointSliceIdx = 2
+                % withinSliceIdx = 15, then, we whould slice as:
+                %  fullJointProbTensor(:,15,:,:) to get the
+                %  probability given a variable
+                
+                % slice out the correct index
+                outputTensor = slice(outputTensor, withinSliceIdx, fullJointSliceDim);
+            end
             
             % integrate out nuisance variables
+            nodesToIntegrateOut = setdiff(dagChainVec,requestedNodesIdxs);
+            for ii=1:length(nodesToIntegrateOut)
+                nodeToIntegrateOut = nodesToIntegrateOut(ii);
+                
+                % the ii-1 is to allow for the fact that every-time we sum
+                % across a dimension, we reduce the dimension of the tensor
+                % by 1
+                dimToIntegrate = find(dagChainVec==nodeToIntegrateOut)-(ii-1);
+                outputTensor = sum(outputTensor,dimToIntegrate);
+            end
             
+            % squeeze dimensions
+            % we squeeze at the end so that we can use the same indexing
+            % values above
+            prob = squeeze(outputTensor);
             
+            % normalize probability
+            prob = prob ./ sum(prob(:));
         end
         
     end
