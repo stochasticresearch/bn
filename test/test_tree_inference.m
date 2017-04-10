@@ -1,19 +1,20 @@
 %% Test the tree based inference method
 clear;
 clc;
+dbstop if error;
 
 M_train = 500;
 M_test = 500;
 
 % generate a simple DAG w/ 4 nodes, 2 discrete, 2 continuous
 nodeNames = {'A','B','C','D'};
-discreteNodes = {'C','D'};
+discreteNodes = {'B','D'};
 dag = zeros(4,4);
 dag(1,3) = 1;   % A --> C
 dag(3,2) = 1;   % C --> B
 dag(2,4) = 1;   % B --> D
 
-K = 25;
+K = 10;
 
 % generate the data
 
@@ -36,18 +37,25 @@ U = [U_C1 U_C2_2 U_C3_2];
 % convert pseudo-observations to data
 b_dist_probs = [0.2 0.3 0.4 0.1];
 d_dist_probs = [0.1 0.2 0.2 0.5];
-b_dist = makedist('Multinomial','Probabilities',b_dist_probs);
-d_dist = makedist('Multinomial','Probabilities',d_dist_probs);
+b_dist_obj = makedist('Multinomial','Probabilities',b_dist_probs);
+d_dist_obj = makedist('Multinomial','Probabilities',d_dist_probs);
+a_dist_obj = makedist('Normal','mu',3,'sigma',5);
+c_dist_obj = makedist('Normal','mu',-2,'sigma',2);
+
 X = zeros(size(U));
 X(:,1) = norminv(U(:,1), 3, 5);
-X(:,2) = b_dist.icdf(U(:,3));
+X(:,2) = b_dist_obj.icdf(U(:,3));
 X(:,3) = norminv(U(:,2), -2, 2);
-X(:,4) = d_dist.icdf(U(:,4));
+X(:,4) = d_dist_obj.icdf(U(:,4));
 
 hcbnObj = hcbn_k1(X,nodeNames,discreteNodes,K,dag);
 save('/tmp/test_tree_inference.mat');
 
 %% Test the computations of pairwise-joints
+clear;
+clc;
+dbstop if error;
+
 load('/tmp/test_tree_inference.mat');
 
 a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
@@ -84,6 +92,95 @@ hcbnObjCpy.copulaFamilies{d_idx}.C_discrete_integrate = bd_discrete_integrate;
 [cb_joint_modelknown,cb_known_xy] = hcbnObjCpy.computePairwiseJoint(b_idx, c_idx);
 [bd_joint_modelknown,bd_known_xy] = hcbnObjCpy.computePairwiseJoint(d_idx, b_idx);
 
-% now generate the reference -- and compute the error
+% ensure the domains of calculation are the same (they should be)
+if(~isequal(ac_modelselect_xy,ac_known_xy) || ...
+   ~isequal(cb_modelselect_xy,cb_known_xy) || ...
+   ~isequal(bd_modelselect_xy,bd_known_xy))
+    error('Domains of calculation seem different!');
+end
 
+% now generate the reference -- and compute the error
+ac_joint_modelselect_err = zeros(size(ac_joint_modelselect));
+ac_joint_modelknown_err = zeros(size(ac_joint_modelknown));
+for ii=1:numel(ac_modelselect_xy)   % use linear indexing
+    xy = ac_modelselect_xy{ii};
+    
+    model_select_prob = ac_joint_modelselect(ii);
+    model_forced_prob = ac_joint_modelknown(ii);
+    
+    % get the "true" model probability
+    % h(x,y) = c(F(x),G(y))*f(x)*g(y)
+    F_c = a_dist_obj.cdf(xy(1));    % child is stored as x-coordinate
+    F_a = c_dist_obj.cdf(xy(2));    % parent is stored as y-coordinate
+    f_c = a_dist_obj.pdf(xy(1));
+    f_a = c_dist_obj.pdf(xy(2));
+    true_prob = copulapdf('Gaussian',[F_c F_a],rho1)*f_c*f_a;
+    
+    % compute error & store
+    ac_joint_modelselect_err(ii) = (true_prob-model_select_prob).^2;
+    ac_joint_modelknown_err(ii) = (true_prob-model_forced_prob).^2;
+end
+
+cb_joint_modelselect_err = zeros(size(cb_joint_modelselect));
+cb_joint_modelknown_err = zeros(size(cb_joint_modelknown));
+for ii=1:numel(cb_modelselect_xy)   % use linear indexing
+    xy = cb_modelselect_xy{ii};
+    
+    model_select_prob = cb_joint_modelselect(ii);
+    model_forced_prob = cb_joint_modelknown(ii);
+    
+    % get the "true" model probability
+    % h(x,y) = [C(F(x),G(y)) - C(F(x),G(y-))]* f(x)
+    F_c = c_dist_obj.cdf(xy(2));    % parent is stored as y-coordinate
+    f_c = c_dist_obj.pdf(xy(2));
+    % B is a discrete random variable, so we handle it differently
+    b_val = xy(1);
+    F_b = b_dist_obj.cdf(b_val);
+    F_b_minus = b_dist_obj.cdf(b_val-1);
+    
+    true_prob = (copulacdf('Frank',[F_b F_c],alpha_c2) - ...
+                 copulacdf('Frank',[F_b_minus F_c],alpha_c2))*f_c;
+    
+    % compute error & store
+    cb_joint_modelselect_err(ii) = (true_prob-model_select_prob).^2;
+    cb_joint_modelknown_err(ii) = (true_prob-model_forced_prob).^2;
+end
+
+bd_joint_modelselect_err = zeros(size(bd_joint_modelselect));
+bd_joint_modelknown_err = zeros(size(bd_joint_modelknown));
+for ii=1:numel(bd_modelselect_xy)   % use linear indexing
+    xy = bd_modelselect_xy{ii};
+    
+    model_select_prob = bd_joint_modelselect(ii);
+    model_forced_prob = bd_joint_modelknown(ii);
+    
+    % get the "true" model probability
+    % h(x,y) = [C(F(x),G(y)) - C(F(x),G(y-)) - C(F(x-),G(y) + C(F(x-)+G(y-))]
+    b_val = xy(2);
+    F_b = b_dist_obj.cdf(b_val);    % parent is stored as y-coordinate
+    F_b_minus = b_dist_obj.pdf(b_val-1);
+    
+    d_val = xy(1);
+    F_d = d_dist_obj.cdf(d_val);
+    F_d_minus = d_dist_obj.cdf(d_val-1);
+    
+    true_prob = (copulacdf('Frank',[F_d F_b],alpha_c3) - ...
+                 copulacdf('Frank',[F_d_minus F_b],alpha_c3) - ...
+                 copulacdf('Frank',[F_d F_b_minus],alpha_c3) + ...
+                 copulacdf('Frank',[F_d_minus F_b_minus],alpha_c3) );
+    
+    % compute error & store
+    bd_joint_modelselect_err(ii) = (true_prob-model_select_prob).^2;
+    bd_joint_modelknown_err(ii) = (true_prob-model_forced_prob).^2;
+end
+
+% plot the errors
+subplot(2,3,1); surf(ac_joint_modelselect_err); title('A->C (ModelSelect)'); zlabel('MSE'); grid on;
+subplot(2,3,4); surf(ac_joint_modelknown_err);  title('A->C (ModelKnown)'); zlabel('MSE'); grid on;
+
+subplot(2,3,2); surf(cb_joint_modelselect_err); title('C->B (ModelSelect)'); zlabel('MSE'); grid on;
+subplot(2,3,5); surf(cb_joint_modelknown_err);  title('C->B (ModelKnown)'); zlabel('MSE'); grid on;
+
+subplot(2,3,3); surf(bd_joint_modelselect_err); title('B->D (ModelSelect)'); zlabel('MSE'); grid on;
+subplot(2,3,6); surf(bd_joint_modelknown_err);  title('B->D (ModelKnown)'); zlabel('MSE'); grid on;
 %% Test the inference computations

@@ -1,4 +1,4 @@
-classdef hcbn_k1 < handle
+classdef hcbn_k1 < handle & matlab.mixin.Copyable
     %HCBN Definition of a Hybrid Copula Bayesian Network w/ maximum
     %in-degree and out-degree to be 1, i.e. a tree structure 
     %
@@ -256,9 +256,13 @@ classdef hcbn_k1 < handle
                     % partial derivative of the copula function w.r.t. only
                     % the continuous variables
                     [~,discreteDimensions,~] = intersect(allIdxs,obj.discNodeIdxs); discreteDimensions = discreteDimensions';
-                    C_discrete_integrate = c;
-                    for discreteDimension=discreteDimensions
-                        C_discrete_integrate = cumtrapz(u,C_discrete_integrate,discreteDimension);
+                    if(~isempty(discreteDimensions))
+                        C_discrete_integrate = c;
+                        for discreteDimension=discreteDimensions
+                            C_discrete_integrate = cumtrapz(u,C_discrete_integrate,discreteDimension);
+                        end
+                    else
+                        C_discrete_integrate = [];
                     end
 
                     copFam = hcbnk1family(node, nodeIdx, parentNames, parentIdxs, ...
