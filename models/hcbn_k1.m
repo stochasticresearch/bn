@@ -506,7 +506,7 @@ classdef hcbn_k1 < handle
             end
         end
         
-        function [prob] = computePairwiseJoint(obj, childNode, parentNode)
+        function [prob, xy] = computePairwiseJoint(obj, childNode, parentNode)
             % determine if we have continuous, hybrid-1, hybrid-2, or
             % discrete scenarios
             childDiscrete = any(childNode==obj.discNodeIdxs);
@@ -529,7 +529,8 @@ classdef hcbn_k1 < handle
             copFamilyObj = obj.copulaFamilies{childNode};
             childDomain = childObj.domain;
             parentDomain = parentObj.domain;
-            prob = zeros([length(childDomain) length(parentDomain)]);
+            prob = zeros(length(childDomain), length(parentDomain));
+            xy   = cell(length(childDomain), length(parentDomain));
             
             if(strcmpi(probabilityType, 'all-continuous'))
                 % f(x,y) = f(x)*f(y)*c(F(x),F(y))
@@ -541,6 +542,7 @@ classdef hcbn_k1 < handle
                         prob(ii,jj) = childObj.pdf(xVal)*...
                                       parentObj.pdf(yVal)*...
                                       copulapdf(copFamilyObj.c_model_name, uVec, copFamilyObj.c_model_params);
+                        xy{ii,jj} = [xVal yVal];
                     end
                 end
             elseif(strcmpi(probabilityType, 'all-discrete'))
@@ -576,6 +578,7 @@ classdef hcbn_k1 < handle
                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v1]) - ...
                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v2]) + ...
                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v1]);
+                        xy{ii,jj} = [xVal yVal];
                     end
                 end
                 
@@ -596,6 +599,7 @@ classdef hcbn_k1 < handle
                         prob(ii,jj) = parentObj.pdf(yVal)*...
                                       (empcopulaval(copFamilyObj.C_discrete_integrate, [u2, v]) - ...
                                        empcopulaval(copFamilyObj.C_discrete_integrate, [u1, v]) );
+                        xy{ii,jj} = [xVal yVal];
                     end
                 end
             else
@@ -615,6 +619,7 @@ classdef hcbn_k1 < handle
                         prob(ii,jj) = childObj.pdf(xVal)*...
                                       (empcopulaval(copFamilyObj.C_discrete_integrate, [u, v2]) - ...
                                        empcopulaval(copFamilyObj.C_discrete_integrate, [u, v1]) );
+                        xy{ii,jj} = [xVal yVal];
                     end
                 end
             end
