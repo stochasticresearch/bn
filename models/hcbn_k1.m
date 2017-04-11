@@ -543,9 +543,10 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     for jj=1:length(parentDomain)
                         yVal = parentDomain(jj);
                         uVec = [childObj.cdf(xVal) parentObj.cdf(yVal)];
-                        prob(ii,jj) = childObj.pdf(xVal)*...
-                                      parentObj.pdf(yVal)*...
-                                      copulapdf(copFamilyObj.c_model_name, uVec, copFamilyObj.c_model_params);
+                        probVal = childObj.pdf(xVal)*...
+                                  parentObj.pdf(yVal)*...
+                                  copulapdf(copFamilyObj.c_model_name, uVec, copFamilyObj.c_model_params);
+                        prob(ii,jj) = probVal;
                         xy{ii,jj} = [xVal yVal];
                     end
                 end
@@ -578,10 +579,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         end
                         v2 = parentObj.cdf(yVal);
                         % compute the C-Volume
-                        prob(ii,jj) = empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v2]) - ...
-                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v1]) - ...
-                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v2]) + ...
-                                      empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v1]);
+                        probVal = empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v2], 0) - ...
+                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v1], 0) - ...
+                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v2], 0) + ...
+                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v1], 0);
+                        prob(ii,jj) = probVal;
                         xy{ii,jj} = [xVal yVal];
                     end
                 end
@@ -600,9 +602,10 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         end
                         u2 = childObj.cdf(xVal);
                         v = parentObj.cdf(yVal);
-                        prob(ii,jj) = parentObj.pdf(yVal)*...
-                                      (empcopulaval(copFamilyObj.C_discrete_integrate, [u2, v]) - ...
-                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u1, v]) );
+                        probVal = parentObj.pdf(yVal)*...
+                                  (empcopulaval(copFamilyObj.C_discrete_integrate, [u2, v], 0) - ...
+                                   empcopulaval(copFamilyObj.C_discrete_integrate, [u1, v], 0) );
+                        prob(ii,jj) = probVal;
                         xy{ii,jj} = [xVal yVal];
                     end
                 end
@@ -620,16 +623,17 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         end
                         v2 = parentObj.cdf(yVal);
                         u = childObj.cdf(xVal);
-                        prob(ii,jj) = childObj.pdf(xVal)*...
-                                      (empcopulaval(copFamilyObj.C_discrete_integrate, [u, v2]) - ...
-                                       empcopulaval(copFamilyObj.C_discrete_integrate, [u, v1]) );
+                        probVal = childObj.pdf(xVal)*...
+                                  (empcopulaval(copFamilyObj.C_discrete_integrate, [u, v2], 0) - ...
+                                   empcopulaval(copFamilyObj.C_discrete_integrate, [u, v1], 0) );
+                        prob(ii,jj) = probVal;
                         xy{ii,jj} = [xVal yVal];
                     end
                 end
             end
         end
         
-        function [prob] = inference(obj, requestedNodes, givenNodes, givenVals)
+        function [prob, domain] = inference(obj, requestedNodes, givenNodes, givenVals)
             % Performs inference on the HCBN, given a certain number of
             % nodes for the requested nodes.  Requested Nodes and Given
             % Nodes can both be provided as either indices, or names.
@@ -673,7 +677,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 reqNodesTopoOrderVec(ii) = find(obj.topoOrder==requestedNodesIdxs(ii));
             end
             givenNodesTopoOrderVec = zeros(1,length(givenNodesIdxs));
-            for ii=1:length(requestedNodesIdxs)
+            for ii=1:length(givenNodesIdxs)
                 givenNodesTopoOrderVec(ii) = find(obj.topoOrder==givenNodesIdxs(ii));
             end
             minReq = min(reqNodesTopoOrderVec);
@@ -681,8 +685,17 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             minGiv = min(givenNodesTopoOrderVec);
             maxGiv = max(givenNodesTopoOrderVec);
             
-            minNode = min(minReq,minGiv);
-            maxNode = max(maxReq,maxGiv);
+            if(isempty(minGiv))
+                minNode = minReq;
+            else
+                minNode = min(minReq,minGiv);
+            end
+            
+            if(isempty(maxGiv))
+                maxNode = maxReq;
+            else
+                maxNode = max(maxReq,maxGiv);
+            end
             
             % we use these indices to get access to the correct
             % probabilities in the copula family and the marginal
@@ -702,33 +715,46 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
             numPairwiseProbsToCompute = length(dagChainVec)-1;
             
-            fullJointProbTensor = zeros(szArr);
             pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
+            xyCell = cell(1,numPairwiseProbsToCompute);
             % compute pairwise joint probabilities
             for ii=1:numPairwiseProbsToCompute
                 childNode = dagChainVec(ii+1);
                 parentNode = dagChainVec(ii);
-                pairwiseJointProbsCell{ii} = obj.computePairwiseJoint(childNode, parentNode);
+                [pairwiseJointProbsCell{ii}, xyCell{ii}] = obj.computePairwiseJoint(childNode, parentNode);
             end
             
             % compute overall joint
             % TODO: is there a more efficient way to do this w/ matrix
             % operations?  I would think so ...
+            fullJointProbTensor = zeros(szArr);
+            domain = cell(szArr);
             idxsOutput = cell(1,numel(szArr));
             for ii=1:prod(szArr)
                 [idxsOutput{:}] = ind2sub(szArr,ii);
                 idxsMat = cell2mat(idxsOutput);
                 prob = 1;
+                domainVec = zeros(1,numPairwiseProbsToCompute+1);
                 for jj=1:numPairwiseProbsToCompute
                     pairwiseJoint = pairwiseJointProbsCell{jj};
-                    accessIdx = idxsMat(jj,jj+1);
-                    prob = prob*pairwiseJoint(accessIdx(1),accessIdx(2));
+                    xy = xyCell{jj};
+                    accessIdxVec = fliplr(idxsMat(jj:jj+1));    % flip because the pairwise joints are stored as [child/parent]
+                                                                % and idxsMat is stored as parent/child
+                    prob = prob*pairwiseJoint(accessIdxVec(1),accessIdxVec(2));
+                    xyVec = xy{accessIdxVec(1),accessIdxVec(2)};
+                    if(jj==1)
+                        domainVec(jj) = xyVec(2);
+                    else
+                        domainVec(jj:jj+1) = fliplr(xyVec);
+                    end
                 end
                 fullJointProbTensor(ii) = prob;
+                domain{ii} = domainVec;
             end
             
             % apply the given variables
             outputTensor = fullJointProbTensor;
+            % TODO: modify domainTensor cell array appropriately
             for ii=1:length(givenNodesIdxs)
                 givenNodeIdx = givenNodesIdxs(ii);
                 givenNodeVal = givenVals(ii);

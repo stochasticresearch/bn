@@ -49,14 +49,35 @@ X(:,3) = norminv(U(:,2), -2, 2);
 X(:,4) = d_dist_obj.icdf(U(:,4));
 
 hcbnObj = hcbn_k1(X,nodeNames,discreteNodes,K,dag);
-save('/tmp/test_tree_inference.mat');
+
+if ispc
+    saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
+elseif isunix
+    % do something else
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+else
+    % do a third thing
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+end
+fileName = 'test_tree_inference.mat';
+save(fullfile(saveDir,fileName));
 
 %% Test the computations of pairwise-joints
 clear;
 clc;
 dbstop if error;
 
-load('/tmp/test_tree_inference.mat');
+if ispc
+    saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
+elseif isunix
+    % do something else
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+else
+    % do a third thing
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+end
+fileName = 'test_tree_inference.mat';
+load(fullfile(saveDir,fileName));
 
 a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
 
@@ -78,14 +99,14 @@ hcbnObjCpy.copulaFamilies{c_idx}.C_discrete_integrate = []; % doesn't matter sin
 cb_copula_pdf = reshape(copulapdf('Frank',[U(:),V(:)], alpha_c2),hcbnObj.K,hcbnObj.K);
 hcbnObjCpy.copulaFamilies{b_idx}.c_model_name = 'Frank';
 hcbnObjCpy.copulaFamilies{b_idx}.c_model_params = alpha_c2;
-cb_discrete_integrate = cumtrapz(u,cb_copula_pdf,2);
+cb_discrete_integrate = cumtrapz(u,cb_copula_pdf,1);    % dim-1 = B (discrete)
 hcbnObjCpy.copulaFamilies{b_idx}.C_discrete_integrate = cb_discrete_integrate;
 
 bd_copula_pdf = reshape(copulapdf('Frank',[U(:),V(:)], alpha_c3),hcbnObj.K,hcbnObj.K);
 hcbnObjCpy.copulaFamilies{d_idx}.c_model_name = 'Frank';
 hcbnObjCpy.copulaFamilies{d_idx}.c_model_params = alpha_c2;
 % both dimensions are discrete so we integrate both
-bd_discrete_integrate = cumtrapz(u,cumtrapz(u,bd_copula_pdf,1),2);
+bd_discrete_integrate = cumtrapz(u,cumtrapz(u,bd_copula_pdf,1),2);  % dim-1 & dim-2 are discrete here
 hcbnObjCpy.copulaFamilies{d_idx}.C_discrete_integrate = bd_discrete_integrate;
 
 [ac_joint_modelknown,ac_known_xy] = hcbnObjCpy.computePairwiseJoint(c_idx, a_idx);
@@ -97,6 +118,24 @@ if(~isequal(ac_modelselect_xy,ac_known_xy) || ...
    ~isequal(cb_modelselect_xy,cb_known_xy) || ...
    ~isequal(bd_modelselect_xy,bd_known_xy))
     error('Domains of calculation seem different!');
+end
+if(any(isnan(ac_joint_modelselect(:))) || any( ac_joint_modelselect(:) < 0) )
+    error('ac_joint_modelselect NaN or Negative!');
+end
+if(any(isnan(ac_joint_modelknown(:))) || any( ac_joint_modelknown(:) < 0) )
+    error('ac_joint_modelknown NaN or Negative!');
+end
+if(any(isnan(cb_joint_modelselect(:))) || any( cb_joint_modelselect(:) < 0) )
+    error('cb_joint_modelselect NaN or Negative!');
+end
+if(any(isnan(cb_joint_modelknown(:))) || any( cb_joint_modelknown(:) < 0) )
+    error('cb_joint_modelknown NaN or Negative!');
+end
+if(any(isnan(bd_joint_modelselect(:))) || any( bd_joint_modelselect(:) < 0) )
+    error('bd_joint_modelselect NaN or Negative!');
+end
+if(any(isnan(bd_joint_modelknown(:))) || any( bd_joint_modelknown(:) < 0) )
+    error('bd_joint_modelknown NaN or Negative!');
 end
 
 % now generate the reference -- and compute the error
@@ -175,12 +214,35 @@ for ii=1:numel(bd_modelselect_xy)   % use linear indexing
 end
 
 % plot the errors
-subplot(2,3,1); surf(ac_joint_modelselect_err); title('A->C (ModelSelect)'); zlabel('MSE'); grid on;
-subplot(2,3,4); surf(ac_joint_modelknown_err);  title('A->C (ModelKnown)'); zlabel('MSE'); grid on;
+subplot(2,3,1); surf(ac_joint_modelselect_err); title('A->C (ModelSelect) [C]'); zlabel('MSE'); grid on;
+subplot(2,3,4); surf(ac_joint_modelknown_err);  title('A->C (ModelKnown) [C]'); zlabel('MSE'); grid on;
 
-subplot(2,3,2); surf(cb_joint_modelselect_err); title('C->B (ModelSelect)'); zlabel('MSE'); grid on;
-subplot(2,3,5); surf(cb_joint_modelknown_err);  title('C->B (ModelKnown)'); zlabel('MSE'); grid on;
+subplot(2,3,2); surf(cb_joint_modelselect_err); title('C->B (ModelSelect) [H]'); zlabel('MSE'); grid on;
+subplot(2,3,5); surf(cb_joint_modelknown_err);  title('C->B (ModelKnown) [H]'); zlabel('MSE'); grid on;
 
-subplot(2,3,3); surf(bd_joint_modelselect_err); title('B->D (ModelSelect)'); zlabel('MSE'); grid on;
-subplot(2,3,6); surf(bd_joint_modelknown_err);  title('B->D (ModelKnown)'); zlabel('MSE'); grid on;
-%% Test the inference computations
+subplot(2,3,3); surf(bd_joint_modelselect_err); title('B->D (ModelSelect) [D]'); zlabel('MSE'); grid on;
+subplot(2,3,6); surf(bd_joint_modelknown_err);  title('B->D (ModelKnown) [D]'); zlabel('MSE'); grid on;
+
+%% Test the computations of the full joint probability
+clear;
+clc;
+dbstop if error;
+
+if ispc
+    saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
+elseif isunix
+    % do something else
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+else
+    % do a third thing
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+end
+fileName = 'test_tree_inference.mat';
+load(fullfile(saveDir,fileName));
+
+requestedNodesIdx = 1:4;
+givenNodesIdx = [];
+
+a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
+
+[prob,domain] = hcbnObj.inference(requestedNodesIdx, givenNodesIdx);
