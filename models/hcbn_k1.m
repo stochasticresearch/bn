@@ -256,13 +256,18 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     % partial derivative of the copula function w.r.t. only
                     % the continuous variables
                     [~,discreteDimensions,~] = intersect(allIdxs,obj.discNodeIdxs); discreteDimensions = discreteDimensions';
-                    if(~isempty(discreteDimensions))
+                    if(~isempty(discreteDimensions) && length(discreteDimensions)<length(allIdxs))
+                        % hybrid scenario, where we manually integrate out
+                        % the dimensions that are discrete
                         C_discrete_integrate = c;
                         for discreteDimension=discreteDimensions
                             C_discrete_integrate = cumtrapz(u,C_discrete_integrate,discreteDimension);
                         end
                     else
                         C_discrete_integrate = [];
+                        % works for both all-continuous and all-discrete
+                        % scenarios because we can use the pdf and cdf
+                        % models directly.
                     end
 
                     copFam = hcbnk1family(node, nodeIdx, parentNames, parentIdxs, ...
@@ -554,13 +559,6 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % f(x,y) = sum(sum( [(-1)^(i+j) C(u_i,v_j)], 1, 2), 1, 2)
                 %  u_1 = F(x-), u_2 = F(x)
                 %  v_1 = F(y-), v_2 = F(y)
-                
-                % !!!!!!!!!!!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!!!!!!!
-                % Compare integration of c to C, with querying C directly!
-                % Recommend changing so that in a k1family, if we know both
-                % nodes are discrete we store that info somehow so that we
-                % can just call 
-                % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 for ii=1:length(childDomain)
                     xVal = childDomain(ii);
                     for jj=1:length(parentDomain)
@@ -579,10 +577,12 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         end
                         v2 = parentObj.cdf(yVal);
                         % compute the C-Volume
-                        probVal = empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v2], 0) - ...
-                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u2 v1], 0) - ...
-                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v2], 0) + ...
-                                  empcopulaval(copFamilyObj.C_discrete_integrate, [u1 v1], 0);
+                        model_name = copFamilyObj.c_model_name;
+                        model_params = copFamilyObj.c_model_params;
+                        probVal = copulacdf(model_name, [u2 v2], model_params) - ...
+                                  copulacdf(model_name, [u2 v1], model_params) - ...
+                                  copulacdf(model_name, [u1 v2], model_params) + ...
+                                  copulacdf(model_name, [u1 v1], model_params);
                         prob(ii,jj) = probVal;
                         xy{ii,jj} = [xVal yVal];
                     end

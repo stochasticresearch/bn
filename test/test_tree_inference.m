@@ -14,7 +14,7 @@ dag(1,3) = 1;   % A --> C
 dag(3,2) = 1;   % C --> B
 dag(2,4) = 1;   % B --> D
 
-K = 10;
+K = 25;
 
 % generate the data
 
