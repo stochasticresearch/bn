@@ -774,6 +774,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 
                 % slice out the correct index
                 outputTensor = slice(outputTensor, withinSliceIdx, fullJointSliceDim);
+                
+                % ***** TODO *****
+                % remove dimensions from the domain cell-array to maintain
+                % consistency between data and the corresponding reference
+                % point
             end
             
             % integrate out nuisance variables
@@ -786,6 +791,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % by 1
                 dimToIntegrate = find(dagChainVec==nodeToIntegrateOut)-(ii-1);
                 outputTensor = sum(outputTensor,dimToIntegrate);
+                
+                % remove dimensions from the domain cell-array to maintain
+                % consistency between data and the corresponding reference
+                % point
+                domain = squeeze(slice(domain, 1, dimToIntegrate));
             end
             
             % squeeze dimensions

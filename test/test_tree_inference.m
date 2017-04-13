@@ -283,9 +283,9 @@ bd_prob_match = isequal(bd_joint_modelselectT, bd_joint_inference);
 fprintf('BD ** Domain_Match=%d | Prob_Match=%d\n', ...
         bd_domain_match, bd_prob_match);
 
-ac_marginalization_err = (ac_joint_inference_normalized'-ac_joint_modelselect).^2;
-cb_marginalization_err = (cb_joint_inference_normalized'-cb_joint_modelselect).^2;
-bd_marginalization_err = (bd_joint_inference_normalized'-bd_joint_modelselect).^2;
+ac_marginalization_err = (ac_joint_inference_normalized-ac_joint_modelselect').^2;
+cb_marginalization_err = (cb_joint_inference_normalized-cb_joint_modelselect').^2;
+bd_marginalization_err = (bd_joint_inference_normalized-bd_joint_modelselect').^2;
 
 subplot(1,3,1); surf(ac_marginalization_err); title('A->C [C]'); zlabel('MSE'); grid on;
 subplot(1,3,2); surf(cb_marginalization_err); title('C->B [C]'); zlabel('MSE'); grid on;
@@ -310,6 +310,7 @@ load(fullfile(saveDir,fileName));
 
 a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
 requestedNodesIdx = [a_idx b_idx];
-[ab_joint_inference,ab_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues);
+givenNodesIdx = [];     % force the inference engine to integrate out the C node
+[ab_joint_inference,ab_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx);
 % how to verify ab is actually correct? there is no reference distribution
 % to compare against
