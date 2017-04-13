@@ -633,7 +633,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
         end
         
-        function [prob, domain] = inference(obj, requestedNodes, givenNodes, givenVals)
+        function [prob, domain] = inference(obj, requestedNodes, givenNodes, givenVals, normalizeProbFlag)
             % Performs inference on the HCBN, given a certain number of
             % nodes for the requested nodes.  Requested Nodes and Given
             % Nodes can both be provided as either indices, or names.
@@ -742,11 +742,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                                                                 % and idxsMat is stored as parent/child
                     prob = prob*pairwiseJoint(accessIdxVec(1),accessIdxVec(2));
                     xyVec = xy{accessIdxVec(1),accessIdxVec(2)};
-                    if(jj==1)
-                        domainVec(jj) = xyVec(2);
-                    else
-                        domainVec(jj:jj+1) = fliplr(xyVec);
-                    end
+                    domainVec(jj:jj+1) = fliplr(xyVec);
                 end
                 fullJointProbTensor(ii) = prob;
                 domain{ii} = domainVec;
@@ -798,7 +794,15 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             prob = squeeze(outputTensor);
             
             % normalize probability
-            prob = prob ./ sum(prob(:));
+            if(nargin>4)
+                if(normalizeProbFlag)
+                    prob = prob ./ sum(prob(:));
+                end
+            else
+                % by default normalize
+                prob = prob ./ sum(prob(:));
+            end
+            
         end
         
     end

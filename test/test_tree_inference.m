@@ -240,9 +240,76 @@ end
 fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
 
-requestedNodesIdx = 1:4;
-givenNodesIdx = [];
-
 a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
 
-[prob,domain] = hcbnObj.inference(requestedNodesIdx, givenNodesIdx);
+givenNodesIdx = [];
+givenNodesValues = [];
+normalizeProb = 0;
+
+% Get all the pairwise
+[ac_joint_modelselect,ac_modelselect_xy] = hcbnObj.computePairwiseJoint(c_idx, a_idx);
+[cb_joint_modelselect,cb_modelselect_xy] = hcbnObj.computePairwiseJoint(b_idx, c_idx);
+[bd_joint_modelselect,bd_modelselect_xy] = hcbnObj.computePairwiseJoint(d_idx, b_idx);
+
+% marginalize from the joint and see if they equal the pairwise
+requestedNodesIdx = [a_idx c_idx];
+[ac_joint_inference,ac_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues,normalizeProb);
+ac_joint_inference_normalized = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues,1);
+requestedNodesIdx = [c_idx b_idx];
+[cb_joint_inference,cb_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues,normalizeProb);
+cb_joint_inference_normalized = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues,1);
+requestedNodesIdx = [b_idx d_idx];
+[bd_joint_inference,bd_inference_xy] = hcbnObj.inference(requestedNodesIdx, givenNodesIdx,givenNodesValues,normalizeProb);
+bd_joint_inference_normalized = hcbnObj.inference(requestedNodesIdx, givenNodesIdx,givenNodesValues,1);
+
+ac_joint_modelselectT = ac_joint_modelselect'; ac_modelselect_xyT = ac_modelselect_xy';
+ac_inference_xyT = cellfun(@fliplr, ac_inference_xy,'UniformOutput',0);
+ac_domain_match = isequal(ac_modelselect_xyT, ac_inference_xyT);
+ac_prob_match = isequal(ac_joint_modelselectT, ac_joint_inference);
+fprintf('AC ** Domain_Match=%d | Prob_Match=%d\n', ...
+        ac_domain_match, ac_prob_match);
+
+cb_joint_modelselectT = cb_joint_modelselect'; cb_modelselect_xyT = cb_modelselect_xy';
+cb_inference_xyT = cellfun(@fliplr, cb_inference_xy,'UniformOutput',0);
+cb_domain_match = isequal(cb_modelselect_xyT, cb_inference_xyT);
+cb_prob_match = isequal(cb_joint_modelselectT, cb_joint_inference);
+fprintf('CB ** Domain_Match=%d | Prob_Match=%d\n', ...
+        cb_domain_match, cb_prob_match);
+    
+bd_joint_modelselectT = bd_joint_modelselect'; bd_modelselect_xyT = bd_modelselect_xy';
+bd_inference_xyT = cellfun(@fliplr, bd_inference_xy,'UniformOutput',0);
+bd_domain_match = isequal(bd_modelselect_xyT, bd_inference_xyT);
+bd_prob_match = isequal(bd_joint_modelselectT, bd_joint_inference);
+fprintf('BD ** Domain_Match=%d | Prob_Match=%d\n', ...
+        bd_domain_match, bd_prob_match);
+
+ac_marginalization_err = (ac_joint_inference_normalized'-ac_joint_modelselect).^2;
+cb_marginalization_err = (cb_joint_inference_normalized'-cb_joint_modelselect).^2;
+bd_marginalization_err = (bd_joint_inference_normalized'-bd_joint_modelselect).^2;
+
+subplot(1,3,1); surf(ac_marginalization_err); title('A->C [C]'); zlabel('MSE'); grid on;
+subplot(1,3,2); surf(cb_marginalization_err); title('C->B [C]'); zlabel('MSE'); grid on;
+subplot(1,3,3); surf(bd_marginalization_err); title('B->D [C]'); zlabel('MSE'); grid on;
+
+%% Test the marginalization of nuisance variables
+clear;
+clc;
+dbstop if error;
+
+if ispc
+    saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
+elseif isunix
+    % do something else
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+else
+    % do a third thing
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+end
+fileName = 'test_tree_inference.mat';
+load(fullfile(saveDir,fileName));
+
+a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
+requestedNodesIdx = [a_idx b_idx];
+[ab_joint_inference,ab_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues);
+% how to verify ab is actually correct? there is no reference distribution
+% to compare against
