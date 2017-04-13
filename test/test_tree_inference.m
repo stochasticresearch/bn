@@ -43,9 +43,9 @@ a_dist_obj = makedist('Normal','mu',3,'sigma',5);
 c_dist_obj = makedist('Normal','mu',-2,'sigma',2);
 
 X = zeros(size(U));
-X(:,1) = norminv(U(:,1), 3, 5);
+X(:,1) = norminv(U(:,1), 10, 2);
 X(:,2) = b_dist_obj.icdf(U(:,3));
-X(:,3) = norminv(U(:,2), -2, 2);
+X(:,3) = norminv(U(:,2), -10, 2);
 X(:,4) = d_dist_obj.icdf(U(:,4));
 
 hcbnObj = hcbn_k1(X,nodeNames,discreteNodes,K,dag);
@@ -309,8 +309,26 @@ fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
 
 a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
+
 requestedNodesIdx = [a_idx b_idx];
 givenNodesIdx = [];     % force the inference engine to integrate out the C node
 [ab_joint_inference,ab_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx);
 % how to verify ab is actually correct? there is no reference distribution
 % to compare against
+
+% ensure we are integrating out the correct dimension of the domain by
+% checking the x and y domains, and seeing if they match what we expect
+x_coord_list = zeros(1,numel(ab_inference_xy));
+for ii=1:numel(ab_inference_xy)
+    z = ab_inference_xy{ii};
+    x_coord_list(ii) = z(1);
+end
+x_domain = unique(x_coord_list);        % should be all positive w/ a center around 10
+                                        % based on the way we generated the data
+
+requestedNodesIdx = [c_idx d_idx];
+givenNodesIdx = [];
+[cd_joint_inference,cd_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx);
+
+% ************** TODO ****************
+% How to verify the inference?
