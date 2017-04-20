@@ -674,11 +674,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % find which nodes we will need to compute the probability over
             reqNodesTopoOrderVec = zeros(1,length(requestedNodesIdxs));
             for ii=1:length(requestedNodesIdxs)
-                reqNodesTopoOrderVec(ii) = find(obj.topoOrder==requestedNodesIdxs(ii));
+                reqNodesTopoOrderVec(ii) = obj.topoOrder(requestedNodesIdxs(ii));
             end
             givenNodesTopoOrderVec = zeros(1,length(givenNodesIdxs));
             for ii=1:length(givenNodesIdxs)
-                givenNodesTopoOrderVec(ii) = find(obj.topoOrder==givenNodesIdxs(ii));
+                givenNodesTopoOrderVec(ii) = obj.topoOrder(givenNodesIdxs(ii));
             end
             minReq = min(reqNodesTopoOrderVec);
             maxReq = max(reqNodesTopoOrderVec);
@@ -700,24 +700,24 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % we use these indices to get access to the correct
             % probabilities in the copula family and the marginal
             % probabilities
-            minNodeIdx = obj.topoOrder(minNode);
-            maxNodeIdx = obj.topoOrder(maxNode);
             numNodes = maxNode-minNode+1;
             
             szArr = zeros(1,numNodes);
             dagChainVec = zeros(1,numNodes);
+            idxToLookFor = minNode;
             % make the DAG chain & get create the tensor dimensions
-            dagChainVec(1) = minNodeIdx;
-            szArr(1) = length(obj.empInfo{minNodeIdx}.domain);
-            for ii=2:numNodes
-                dagChainVec(ii) = find(obj.dag(dagChainVec(ii-1),:));
-                szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
+            for ii=1:numNodes
+                mapIdx = find(obj.topoOrder==idxToLookFor);
+                dagChainVec(ii) = mapIdx;
+                szArr(ii) = length(obj.empInfo{mapIdx}.domain);
+                idxToLookFor = idxToLookFor+1;
             end
             numPairwiseProbsToCompute = length(dagChainVec)-1;
             
             pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
             xyCell = cell(1,numPairwiseProbsToCompute);
             % compute pairwise joint probabilities
+            fprintf('Computing %d pairwise probabilities.\n', numPairwiseProbsToCompute);
             for ii=1:numPairwiseProbsToCompute
                 childNode = dagChainVec(ii+1);
                 parentNode = dagChainVec(ii);
@@ -727,6 +727,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % compute overall joint
             % TODO: is there a more efficient way to do this w/ matrix
             % operations?  I would think so ...
+            fprintf('Computing overall joint probabilitiy distribution.\n');
             fullJointProbTensor = zeros(szArr);
             domain = cell(szArr);
             idxsOutput = cell(1,numel(szArr));
@@ -749,8 +750,8 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
             
             % apply the given variables
+            fprintf('Applying given variables.\n');
             outputTensor = fullJointProbTensor;
-            % TODO: modify domainTensor cell array appropriately
             for ii=1:length(givenNodesIdxs)
                 givenNodeIdx = givenNodesIdxs(ii);
                 givenNodeVal = givenVals(ii);
@@ -775,14 +776,18 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % slice out the correct index
                 outputTensor = slice(outputTensor, withinSliceIdx, fullJointSliceDim);
                 
-                % ***** TODO *****
                 % remove dimensions from the domain cell-array to maintain
                 % consistency between data and the corresponding reference
                 % point
+                domain = slice(domain, withinSliceIdx, fullJointSliceDim);
+                idxToKeepVec = 1:(length(dagChainVec)-(ii-1)); idxToKeepVec(fullJointSliceDim) = [];
+                domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
             end
             
             % integrate out nuisance variables
+            fprintf('Integrating out nuisance variables');
             nodesToIntegrateOut = setdiff(dagChainVec,requestedNodesIdxs);
+            nodesToIntegrateOut = setdiff(nodesToIntegrateOut, givenNodesIdxs);
             for ii=1:length(nodesToIntegrateOut)
                 nodeToIntegrateOut = nodesToIntegrateOut(ii);
                 
@@ -795,15 +800,19 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % remove dimensions from the domain cell-array to maintain
                 % consistency between data and the corresponding reference
                 % point
-                domain = squeeze(slice(domain, 1, dimToIntegrate));
+                domain = slice(domain, 1, dimToIntegrate);
+                idxToKeepVec = 1:(length(dagChainVec)-(ii-1)); idxToKeepVec(dimToIntegrate) = [];
+                domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
             end
             
             % squeeze dimensions
             % we squeeze at the end so that we can use the same indexing
             % values above
             prob = squeeze(outputTensor);
+            domain = squeeze(domain);
             
             % normalize probability
+            fprintf('Re-normalizing probabilities');
             if(nargin>4)
                 if(normalizeProbFlag)
                     prob = prob ./ sum(prob(:));

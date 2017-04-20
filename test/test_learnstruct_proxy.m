@@ -45,7 +45,14 @@ clc;
 dbstop if error;
 
 % Read in a data-set
-dataFolder = '/Users/kiran/Documents/data/kdd1999';
+if(ispc)
+    dataFolder = 'C:\\Users\\Kiran\\Documents\\data\\kdd1999';
+elseif(ismac)
+    dataFolder = '/Users/kiran/Documents/data/kdd1999';
+elseif(isunix)
+    dataFolder = 1;
+end
+
 train_dataFile = fullfile(dataFolder, 'kddcup.preprocess.data.train');
 test_dataFile = fullfile(dataFolder, 'kddcup.preprocess.data.test');
 dag_file = fullfile(dataFolder, 'kddcup.learned.dag.mat');
@@ -62,10 +69,15 @@ test_data  = x_test.data(:,2:end);
 discreteIdxs = importdata(discreteIdxsFile)' + 1;   % +1 to reindex w/ python
                                                
 colheaders = x_train.colheaders(2:end);
-K = 25;
+K = 10;
 verboseFlag = 1;
 
-hcbnObj = hcbn_k1(train_data, colheaders, discreteIdxs, K, 'learn', verboseFlag);
+discreteNodesNames = cell(1,length(discreteIdxs));
+for ii=1:length(discreteIdxs)
+    discreteNodeNames{ii} = colheaders{discreteIdxs(ii)};
+end
+
+hcbnObj = hcbn_k1(train_data, colheaders, discreteNodeNames, K, 'learn', verboseFlag);
 
 % save the learned DAG
 save(dag_file);
@@ -76,7 +88,15 @@ clc;
 close all;
 dbstop if error;
 
-dataFolder = '/Users/kiran/Documents/data/kdd1999';
+% Read in a data-set
+if(ispc)
+    dataFolder = 'C:\\Users\\Kiran\\Documents\\data\\kdd1999';
+elseif(ismac)
+    dataFolder = '/Users/kiran/Documents/data/kdd1999';
+elseif(isunix)
+    dataFolder = 1;
+end
+
 dag_file = fullfile(dataFolder, 'kddcup.learned.dag.mat');
 colnames_file = fullfile(dataFolder, 'kddcup.preprocess.data.colnames');
 colnames = importdata(colnames_file)';
@@ -84,9 +104,9 @@ colnames = importdata(colnames_file)';
 load(dag_file);
 
 % plot the grpah
-% bg = biograph(hcbnObj.dag,colnames);
-% dolayout(bg);
-% view(bg)
+bg = biograph(hcbnObj.dag,colnames);
+dolayout(bg);
+view(bg)
 
 % % % now -- compute the likelihood of the model, given the data
 % % totalLL = hcbnObj.dataLogLikelihood(test_data);
@@ -97,5 +117,6 @@ load(dag_file);
 %givenNodes = {colnames{6}, colnames{8}}
 requestedNodes = {'flag'}
 givenNodes = {'srv_serror_rate'}
+% givenNodes = {'dst_bytes'}
 givenValues = [1];
 hcbnObj.inference(requestedNodes, givenNodes, givenValues)

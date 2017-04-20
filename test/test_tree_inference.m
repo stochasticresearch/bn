@@ -332,3 +332,27 @@ givenNodesIdx = [];
 
 % ************** TODO ****************
 % How to verify the inference?
+
+%% Test how we deal w/ "given" variables
+clear;
+clc;
+dbstop if error;
+
+if ispc
+    saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
+elseif isunix
+    % do something else
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+else
+    % do a third thing
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+end
+fileName = 'test_tree_inference.mat';
+load(fullfile(saveDir,fileName));
+
+a_idx = 1; b_idx = 2; c_idx = 3; d_idx = 4;
+
+requestedNodesIdx = [a_idx b_idx];
+givenNodesIdx = [c_idx];
+givenNodesValues = [2];
+[ab_joint_inference,ab_inference_xy] = hcbnObj.inference(requestedNodesIdx,givenNodesIdx,givenNodesValues);

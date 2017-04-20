@@ -43,7 +43,6 @@ if(nargin<3)
 end
 
 estimateCopFlag = 0;    % we don't need to estimate the copula while structure learning
-toposortDagFlag = 0;
 
 % ensure that the seeddag is acyclic
 if(isempty(seeddag) || ~acyclic(seeddag))
