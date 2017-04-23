@@ -46,7 +46,7 @@ estimateCopFlag = 0;    % we don't need to estimate the copula while structure l
 
 % ensure that the seeddag is acyclic
 if(isempty(seeddag) || ~acyclic(seeddag))
-    warning('Specified seeddag is NOT acyclic!');
+%     warning('Specified seeddag is NOT acyclic!');
 	dagModelObj.setDag(zeros(dagModelObj.D,dagModelObj.D), estimateCopFlag);
 else
 	dagModelObj.setDag(seeddag, estimateCopFlag);

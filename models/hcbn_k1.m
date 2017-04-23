@@ -30,6 +30,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     % representation
         dag_topoSorted; % a topologically sorted verison of the DAG
         topoOrder;  % ordering of the nodes topologically by index
+        rg;         % the reachability graph
         nodeNames;  % a cell array of the list of node names  
         nodeVals;   % an array of the topological order of the nodes w.r.t
                     % the DAG
@@ -62,6 +63,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
         LOG_CUTOFF;
         
         PSEUDO_OBS_CALC_METHOD;     % should be either RANK or ECDF
+        VERBOSE_MODE;
     end
     
     methods
@@ -81,6 +83,14 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             %  TODO
             %   [ ] - 
             %
+            nVarargs = length(varargin);
+            if(nVarargs>0)
+                obj.VERBOSE_MODE = varargin{1};
+                if(obj.VERBOSE_MODE)
+                    dispstat('','init'); % One time only initialization
+                    dispstat(sprintf('Begining HCBN Initialization...'),'keepthis','timestamp');
+                end
+            end
             obj.LOG_CUTOFF = 10^-5;
             
             obj.PSEUDO_OBS_CALC_METHOD = 'RANK';    % can be either RANK or ECDF
@@ -94,6 +104,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             
             obj.dag = zeros(obj.D,obj.D);
             obj.dag_topoSorted = [];
+            obj.rg = [];
             
             obj.K = K;
             
@@ -118,20 +129,13 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
             
             obj.calcEmpInfo();
-            
-            nVarargs = length(varargin);
-            if(nVarargs>0)
-                if(ischar(varargin{1}))
+            if(nVarargs>1)
+                if(ischar(varargin{2}))
                     % assume it is just a flag and we attempt to perform
                     % speedy structure learning
-                    if(nVarargs>1)
-                        arg2 = varargin{2};
-                    else
-                        arg2 = 0;
-                    end
-                    learnstruct_hc_llproxy(obj, [], arg2);
+                    learnstruct_hc_llproxy(obj, [], obj.VERBOSE_MODE);
                 else
-                    candidateDag = varargin{1};
+                    candidateDag = varargin{2};
                     if(~acyclic(candidateDag) || isGraphDegG1(candidateDag))
                         error('Specified DAG is not acyclic or In/Out Degree > 1!\n');
                     end
@@ -143,6 +147,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     obj.setDag(candidateDag, estimateCop);       % estimate the copula families
                 end
             end
+            dispstat(sprintf('HCBN Initialization complete!'),'keepthis','timestamp');
+        end
+        
+        function [] = setVerbose(obj, mode)
+            obj.VERBOSE_MODE = mode;
         end
         
         function [] = calcEmpInfo(obj)
@@ -152,6 +161,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             %              the dataset (i.e. each column of the inputted
             %              data matrix X)
             for ii=1:obj.D
+                if(obj.VERBOSE_MODE)
+                    dispstat(sprintf('Learning Node %d/%d empirical distribution...',ii,obj.D),'timestamp');
+                end
                 % check if this is a discrete or continuous node for
                 % density estimation, we handle these separately
                 isdiscrete = 0;
@@ -203,6 +215,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
         
         function [] = setToposortDag(obj)
             [obj.topoOrder,~,obj.dag_topoSorted] = topoSort(obj.dag);
+            obj.rg = reachability_graph(obj.dag);
         end
         
         function [] = setDag(obj, candidateDag, estimateCop)
@@ -220,6 +233,10 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % for each node, estimate the copula of that node and it's
             % parents
             for ii=1:obj.D
+                if(obj.VERBOSE_MODE)
+                    dispstat(sprintf('Learning Copula Family for Node %d/%d...',ii,obj.D),'timestamp');
+                end
+                
                 node = obj.nodeNames{ii};
                 nodeIdx = obj.nodeVals(ii);
                 [parentIdxs, parentNames] = obj.getParents(nodeIdx);
@@ -640,6 +657,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             if(isempty(obj.dag_topoSorted))
                 obj.setToposortDag();
             end
+            
             % determine whether we have indices or we need to get the
             % indices of the requested/given nodes
             if(iscell(requestedNodes))
@@ -671,53 +689,56 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 givenNodesIdxs = givenNodes;
             end
             
-            % find which nodes we will need to compute the probability over
-            reqNodesTopoOrderVec = zeros(1,length(requestedNodesIdxs));
-            for ii=1:length(requestedNodesIdxs)
-                reqNodesTopoOrderVec(ii) = obj.topoOrder(requestedNodesIdxs(ii));
-            end
-            givenNodesTopoOrderVec = zeros(1,length(givenNodesIdxs));
-            for ii=1:length(givenNodesIdxs)
-                givenNodesTopoOrderVec(ii) = obj.topoOrder(givenNodesIdxs(ii));
-            end
-            minReq = min(reqNodesTopoOrderVec);
-            maxReq = max(reqNodesTopoOrderVec);
-            minGiv = min(givenNodesTopoOrderVec);
-            maxGiv = max(givenNodesTopoOrderVec);
-            
-            if(isempty(minGiv))
-                minNode = minReq;
+            % compute the maximum number of nodes we need to compute the
+            % joint probability for
+            numNodes = 0; dagChainVec = [];
+            bg = biograph(obj.dag,obj.nodeNames);
+            % TODO: make this efficient and not dependent upon the biograph
+            % function!
+            if(~isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
+                allCombos = combvec(requestedNodesIdxs,givenNodesIdxs)';
+            elseif(isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
+                allCombos = combvec(givenNodesIdxs,givenNodesIdxs)';
+            elseif(~isempty(requestedNodesIdxs) && isempty(givenNodesIdxs))
+                allCombos = combvec(requestedNodesIdxs,requestedNodesIdxs)';
             else
-                minNode = min(minReq,minGiv);
+                error('Must provide some indices for processing!');
             end
-            
-            if(isempty(maxGiv))
-                maxNode = maxReq;
-            else
-                maxNode = max(maxReq,maxGiv);
+            for ii=1:size(allCombos,1)
+                combo = allCombos(ii,:);
+                fromIdx = combo(1); toIdx = combo(2);
+                ij_reach = obj.rg(fromIdx,toIdx);
+                ji_reach = obj.rg(toIdx,fromIdx);
+                if(ij_reach)
+                    [numNodesTmp,dagChainVecTmp] = shortestpath(bg,fromIdx,toIdx,'Method','Acyclic');
+                elseif(ji_reach)
+                    [numNodesTmp,dagChainVecTmp] = shortestpath(bg,toIdx,fromIdx,'Method','Acyclic');
+                else
+                    numNodesTmp = -999;
+                end
+                numNodesTmp = numNodesTmp + 1;
+                if(numNodesTmp>numNodes)
+                    numNodes = numNodesTmp;
+                    dagChainVec = dagChainVecTmp;
+                end
             end
-            
-            % we use these indices to get access to the correct
-            % probabilities in the copula family and the marginal
-            % probabilities
-            numNodes = maxNode-minNode+1;
+            if(isempty(dagChainVec))
+                error('No Path found between the requested and given nodes!');
+            end
             
             szArr = zeros(1,numNodes);
-            dagChainVec = zeros(1,numNodes);
-            idxToLookFor = minNode;
             % make the DAG chain & get create the tensor dimensions
             for ii=1:numNodes
-                mapIdx = find(obj.topoOrder==idxToLookFor);
-                dagChainVec(ii) = mapIdx;
-                szArr(ii) = length(obj.empInfo{mapIdx}.domain);
-                idxToLookFor = idxToLookFor+1;
+                szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
             end
-            numPairwiseProbsToCompute = length(dagChainVec)-1;
+            numPairwiseProbsToCompute = numNodes-1;
             
             pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
             xyCell = cell(1,numPairwiseProbsToCompute);
             % compute pairwise joint probabilities
-            fprintf('Computing %d pairwise probabilities.\n', numPairwiseProbsToCompute);
+            if(obj.VERBOSE_MODE)
+                dispstat(sprintf('Computing %d pairwise probabilities.', numPairwiseProbsToCompute));
+            end
             for ii=1:numPairwiseProbsToCompute
                 childNode = dagChainVec(ii+1);
                 parentNode = dagChainVec(ii);
@@ -727,7 +748,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % compute overall joint
             % TODO: is there a more efficient way to do this w/ matrix
             % operations?  I would think so ...
-            fprintf('Computing overall joint probabilitiy distribution.\n');
+            if(obj.VERBOSE_MODE)
+                dispstat('Computing overall joint probabilitiy distribution.');
+            end
             fullJointProbTensor = zeros(szArr);
             domain = cell(szArr);
             idxsOutput = cell(1,numel(szArr));
@@ -750,8 +773,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
             
             % apply the given variables
-            fprintf('Applying given variables.\n');
+            if(obj.VERBOSE_MODE)
+                dispstat('Applying given variables.');
+            end
             outputTensor = fullJointProbTensor;
+            idxsToRemove = zeros(1,length(givenNodesIdxs));
             for ii=1:length(givenNodesIdxs)
                 givenNodeIdx = givenNodesIdxs(ii);
                 givenNodeVal = givenVals(ii);
@@ -780,39 +806,44 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % consistency between data and the corresponding reference
                 % point
                 domain = slice(domain, withinSliceIdx, fullJointSliceDim);
-                idxToKeepVec = 1:(length(dagChainVec)-(ii-1)); idxToKeepVec(fullJointSliceDim) = [];
-                domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
+                idxsToRemove(ii) = fullJointSliceDim;
             end
             
             % integrate out nuisance variables
-            fprintf('Integrating out nuisance variables');
+            if(obj.VERBOSE_MODE)
+                dispstat('Integrating out nuisance variables.');
+            end
             nodesToIntegrateOut = setdiff(dagChainVec,requestedNodesIdxs);
             nodesToIntegrateOut = setdiff(nodesToIntegrateOut, givenNodesIdxs);
+            idxsToRemove = [idxsToRemove zeros(1,length(nodesToIntegrateOut))];
             for ii=1:length(nodesToIntegrateOut)
                 nodeToIntegrateOut = nodesToIntegrateOut(ii);
                 
                 % the ii-1 is to allow for the fact that every-time we sum
                 % across a dimension, we reduce the dimension of the tensor
                 % by 1
-                dimToIntegrate = find(dagChainVec==nodeToIntegrateOut)-(ii-1);
+                dimToIntegrate = find(dagChainVec==nodeToIntegrateOut);
                 outputTensor = sum(outputTensor,dimToIntegrate);
                 
                 % remove dimensions from the domain cell-array to maintain
                 % consistency between data and the corresponding reference
                 % point
                 domain = slice(domain, 1, dimToIntegrate);
-                idxToKeepVec = 1:(length(dagChainVec)-(ii-1)); idxToKeepVec(dimToIntegrate) = [];
-                domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
+                idxsToRemove(ii+length(givenNodesIdxs)) = dimToIntegrate;
             end
             
             % squeeze dimensions
             % we squeeze at the end so that we can use the same indexing
             % values above
             prob = squeeze(outputTensor);
+            idxToKeepVec = setdiff(1:length(dagChainVec),idxsToRemove);
+            domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
             domain = squeeze(domain);
             
             % normalize probability
-            fprintf('Re-normalizing probabilities');
+            if(obj.VERBOSE_MODE)
+                dispstat('Re-normalizing probabilities.');
+            end
             if(nargin>4)
                 if(normalizeProbFlag)
                     prob = prob ./ sum(prob(:));
@@ -821,7 +852,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % by default normalize
                 prob = prob ./ sum(prob(:));
             end
-            
+            if(obj.VERBOSE_MODE)
+                dispstat(' ');
+            end
         end
         
     end

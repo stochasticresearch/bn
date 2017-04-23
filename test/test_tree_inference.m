@@ -48,16 +48,17 @@ X(:,2) = b_dist_obj.icdf(U(:,3));
 X(:,3) = norminv(U(:,2), -10, 2);
 X(:,4) = d_dist_obj.icdf(U(:,4));
 
-hcbnObj = hcbn_k1(X,nodeNames,discreteNodes,K,dag);
+verboseFlag = 1;
+hcbnObj = hcbn_k1(X,nodeNames,discreteNodes,K,verboseFlag,dag);
 
 if ispc
     saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
-elseif isunix
+elseif ismac
     % do something else
-    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
 else
     % do a third thing
-    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
 end
 fileName = 'test_tree_inference.mat';
 save(fullfile(saveDir,fileName));
@@ -69,12 +70,12 @@ dbstop if error;
 
 if ispc
     saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
-elseif isunix
+elseif ismac
     % do something else
-    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
 else
     % do a third thing
-    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
 end
 fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
@@ -230,12 +231,12 @@ dbstop if error;
 
 if ispc
     saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
-elseif isunix
+elseif ismac
     % do something else
-    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
 else
     % do a third thing
-    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
 end
 fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
@@ -298,12 +299,12 @@ dbstop if error;
 
 if ispc
     saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
-elseif isunix
+elseif ismac
     % do something else
-    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
 else
     % do a third thing
-    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
 end
 fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
@@ -340,12 +341,12 @@ dbstop if error;
 
 if ispc
     saveDir = 'C:\\Users\\Kiran\\ownCloud\\PhD\\sim_results\\bn';
-elseif isunix
+elseif ismac
     % do something else
-    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
 else
     % do a third thing
-    saveDir = '/Users/Kiran/ownCloud/PhD/sim_results/bn';
+    saveDir = '/home/kiran/ownCloud/PhD/sim_results/bn';
 end
 fileName = 'test_tree_inference.mat';
 load(fullfile(saveDir,fileName));
