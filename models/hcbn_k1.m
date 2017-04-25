@@ -692,9 +692,15 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % compute the maximum number of nodes we need to compute the
             % joint probability for
             numNodes = 0; dagChainVec = [];
-            bg = biograph(obj.dag,obj.nodeNames);
-            % TODO: make this efficient and not dependent upon the biograph
-            % function!
+            bg = digraph(obj.dag,obj.nodeNames);
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % TODO: use the subgraph function available in the graphing &
+            % network toolbox 
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            
             if(~isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
                 allCombos = combvec(requestedNodesIdxs,givenNodesIdxs)';
             elseif(isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
