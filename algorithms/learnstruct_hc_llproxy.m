@@ -9,7 +9,7 @@ function [] = learnstruct_hc_llproxy(dagModelObj, seeddag, verboseFlag)
 %
 % Inputs:
 %  dagModelObj - should be either a HCBN, CLG, or MTE object.
-%                See copula/hcbn/hcbn.m, copula/clg/clg.m, copula/mte/mte.m
+%                See bn/models/hcbn_k1.m
 %  seeddag - a DAG which can be used as a reference DAG as a
 %            starting point for the search process.  This is
 %            optional, and can be an empty array if no seed is
@@ -96,6 +96,11 @@ while ~done
     end
 end
 dispstat('Structure Learning complete!','keepthis','timestamp');
+
+% topo-sort the DAG, and associated data
+% match the topologically sorted DAG
+dispstat('Topologically Sorting DAG!', 'keepthis', 'timestamp');
+dagModelObj.doToposorting();
 
 % now that structure learning is complete, estimate the copula family
 % objects

@@ -47,7 +47,7 @@ dbstop if error;
 % Read in a data-set
 if(ispc)
     dataFolder = 'C:\\Users\\Kiran\\Documents\\data\\kdd1999';
-    outFolder = 'C:\\Documents\\Kiran\\ownCloud\\PhD\sim_results\\bn\\kdd1999';
+    outFolder = 'C:\\Users\\Kiran\\ownCloud\\PhD\sim_results\\bn\\kdd1999';
 elseif(ismac)
     dataFolder = '/Users/kiran/Documents/data/kdd1999';
     outFolder = '/Users/kiran/ownCloud/PhD/sim_results/bn/kdd1999';
@@ -92,7 +92,7 @@ dbstop if error;
 
 % Read in a data-set
 if(ispc)
-    outFolder = 'C:\\Documents\\Kiran\\ownCloud\\PhD\sim_results\\bn\\kdd1999';
+    outFolder = 'C:\\Users\\Kiran\\ownCloud\\PhD\sim_results\\bn\\kdd1999';
 elseif(ismac)
     outFolder = '/Users/kiran/ownCloud/PhD/sim_results/bn/kdd1999';
 elseif(isunix)
@@ -104,7 +104,7 @@ load(dag_file);
 hcbnObj.setVerbose(1);
 
 % % plot the grpah
-% bg = biograph(hcbnObj.dag,hcbnObj.nodeNames);
+% bg = digraph(hcbnObj.dag_topoSorted,hcbnObj.nodeNames);
 % dolayout(bg);
 % view(bg)
 
@@ -115,8 +115,10 @@ hcbnObj.setVerbose(1);
 % test out the application of the topological ordering 
 %requestedNodes = {colnames{3}, colnames{4}}
 %givenNodes = {colnames{6}, colnames{8}}
-requestedNodes = {'flag'}
-givenNodes = {'srv_rerror_rate'}
-% givenNodes = {'dst_bytes'}
+
+% within 1 tree
+requestedNodes = [3,4];
+givenNodes = [];
 givenValues = [1];
+
 [inference,domain] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);

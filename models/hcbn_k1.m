@@ -31,6 +31,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
         dag_topoSorted; % a topologically sorted verison of the DAG
         topoOrder;  % ordering of the nodes topologically by index
         rg;         % the reachability graph
+        topoSortedFlag; % flag indicating whether topological sort was conducted
         nodeNames;  % a cell array of the list of node names  
         nodeVals;   % an array of the topological order of the nodes w.r.t
                     % the DAG
@@ -110,6 +111,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             
             obj.X = X;
             obj.X_xform = X;
+            obj.topoSortedFlag = 0;
 
             obj.discreteNodes = discreteNodes;
             obj.discNodeIdxs = zeros(1,length(obj.discreteNodes));
@@ -128,12 +130,20 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 obj.X_xform(:,idx) = continueRv(obj.X(:,idx));
             end
             
+            % calculate empirical distributions.  We need to do this before
+            % estimating structure b/c after structure estimation, we
+            % estimate copula families, which requires the empirical
+            % distributions to be estimated.  The topological sort will
+            % rearrange the cell-array produced by this function
+            % appropriately
             obj.calcEmpInfo();
+            
             if(nVarargs>1)
                 if(ischar(varargin{2}))
                     % assume it is just a flag and we attempt to perform
                     % speedy structure learning
-                    learnstruct_hc_llproxy(obj, [], obj.VERBOSE_MODE);
+                    seedDag = [];       % start w/ an empty seed
+                    learnstruct_hc_llproxy(obj, seedDag, obj.VERBOSE_MODE);
                 else
                     candidateDag = varargin{2};
                     if(~acyclic(candidateDag) || isGraphDegG1(candidateDag))
@@ -143,10 +153,11 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     if(size(candidateDag,1)~=size(candidateDag,2) || size(candidateDag,1)~=obj.D)
                         error('DAG must be a square matrix of size D!');
                     end
-                    estimateCop = 1;
-                    obj.setDag(candidateDag, estimateCop);       % estimate the copula families
+                    estimateCop = 1;    % flag allows us to toposort & estimate the copula
+                    obj.setDag(candidateDag, estimateCop);
                 end
             end
+            
             dispstat(sprintf('HCBN Initialization complete!'),'keepthis','timestamp');
         end
         
@@ -190,7 +201,6 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             %               this node
             %  parentNames - a cell array of the names of the parents of
             %               this node
-            
             if(ischar(node))
                 % node name was provided
                 nodeName = node;
@@ -206,21 +216,47 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
             
             % find the node's parents
-            parentIdxs = find(obj.dag(:,nodeIdx))';
-            parentNames = cell(1,length(parentIdxs));
-            for jj=1:length(parentIdxs)
-                parentNames{jj} = obj.nodeNames{parentIdxs(jj)};
+            if(obj.topoSortedFlag)
+                parentIdxs = find(obj.dag_topoSorted(:,nodeIdx))';
+            else
+                parentIdxs = find(obj.dag(:,nodeIdx))';
             end
+            parentNames = obj.nodeNames(parentIdxs);
         end
         
-        function [] = setToposortDag(obj)
-            [obj.topoOrder,~,obj.dag_topoSorted] = topoSort(obj.dag);
-            obj.rg = reachability_graph(obj.dag);
+        function [] = doToposorting(obj)
+            g1 = digraph(obj.dag,obj.nodeNames);
+            [n,g2] = toposort(g1,'Order','stable');
+            obj.dag_topoSorted = adjacency(g2);
+            obj.rg = reachability_graph(obj.dag_topoSorted);
+            
+            % reorder all the data and arrays according to the
+            % topologically sorted order
+            obj.nodeNames = obj.nodeNames(n);
+            obj.empInfo = obj.empInfo(n);
+            
+            % reorder the internal data
+            obj.X_xform = obj.X_xform(:,n);
+            obj.X = obj.X(:,n);
+            
+            % fix the discNodeIdxs after re-ordering the nodes
+            obj.discNodeIdxs = zeros(1,length(obj.discreteNodes));
+            for ii=1:length(obj.discNodeIdxs)
+                nodeName = obj.discreteNodes{ii};
+                for jj=1:length(obj.nodeNames)
+                    if(isequal(nodeName,obj.nodeNames{jj}))
+                        obj.discNodeIdxs(ii) = jj;
+                        break;
+                    end
+                end
+            end
+            obj.topoSortedFlag = 1;
         end
-        
+
         function [] = setDag(obj, candidateDag, estimateCop)
             obj.dag = candidateDag;
             if(estimateCop)
+                obj.doToposorting();
                 obj.estFamilyCopula();
             end
         end
@@ -650,12 +686,13 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             end
         end
         
-        function [prob, domain] = inference(obj, requestedNodes, givenNodes, givenVals, normalizeProbFlag)
+        function [probOut, domainOut] = inference(obj, requestedNodes, givenNodes, givenVals, normalizeProbFlag)
             % Performs inference on the HCBN, given a certain number of
             % nodes for the requested nodes.  Requested Nodes and Given
             % Nodes can both be provided as either indices, or names.
-            if(isempty(obj.dag_topoSorted))
-                obj.setToposortDag();
+            
+            if(~obj.topoSortedFlag)
+                error('Must Topologically sort the graph before performing inference!');
             end
             
             % determine whether we have indices or we need to get the
@@ -691,177 +728,161 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             
             % compute the maximum number of nodes we need to compute the
             % joint probability for
-            numNodes = 0; dagChainVec = [];
-            bg = digraph(obj.dag,obj.nodeNames);
-            
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % TODO: use the subgraph function available in the graphing &
-            % network toolbox 
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            
-            if(~isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
-                allCombos = combvec(requestedNodesIdxs,givenNodesIdxs)';
-            elseif(isempty(requestedNodesIdxs) && ~isempty(givenNodesIdxs))
-                allCombos = combvec(givenNodesIdxs,givenNodesIdxs)';
-            elseif(~isempty(requestedNodesIdxs) && isempty(givenNodesIdxs))
-                allCombos = combvec(requestedNodesIdxs,requestedNodesIdxs)';
-            else
-                error('Must provide some indices for processing!');
-            end
-            for ii=1:size(allCombos,1)
-                combo = allCombos(ii,:);
-                fromIdx = combo(1); toIdx = combo(2);
-                ij_reach = obj.rg(fromIdx,toIdx);
-                ji_reach = obj.rg(toIdx,fromIdx);
-                if(ij_reach)
-                    [numNodesTmp,dagChainVecTmp] = shortestpath(bg,fromIdx,toIdx,'Method','Acyclic');
-                elseif(ji_reach)
-                    [numNodesTmp,dagChainVecTmp] = shortestpath(bg,toIdx,fromIdx,'Method','Acyclic');
+            paths = findPaths(obj.dag_topoSorted, requestedNodesIdxs, givenNodesIdxs);
+            numPaths = length(paths);
+            probCell = cell(1,numPaths); domainCell = cell(1,numPaths);
+            for kk=1:numPaths
+                if(obj.VERBOSE_MODE)
+                    dispstat(sprintf('Processing branch %d/%d.', kk, numPaths));
+                end
+                
+                dagChainVec = paths{kk};
+                numNodes = length(dagChainVec); 
+                requestedNodesIdxsPathSubset = intersect(dagChainVec,requestedNodesIdxs);
+                givenNodesIdxsPathSubset = intersect(dagChainVec,givenNodesIdxs);
+                
+                % perform inference for this path
+                szArr = zeros(1,numNodes);
+                % make the DAG chain & get create the tensor dimensions
+                for ii=1:numNodes
+                    szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
+                end
+                numPairwiseProbsToCompute = numNodes-1;
+
+                pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
+                xyCell = cell(1,numPairwiseProbsToCompute);
+                % compute pairwise joint probabilities
+                if(obj.VERBOSE_MODE)
+                    dispstat(sprintf('Computing %d pairwise probabilities.', numPairwiseProbsToCompute));
+                end
+                for ii=1:numPairwiseProbsToCompute
+                    childNode = dagChainVec(ii+1);
+                    parentNode = dagChainVec(ii);
+                    [pairwiseJointProbsCell{ii}, xyCell{ii}] = obj.computePairwiseJoint(childNode, parentNode);
+                end
+
+                % compute overall joint
+                % TODO: is there a more efficient way to do this w/ matrix
+                % operations?  I would think so ...
+                if(obj.VERBOSE_MODE)
+                    dispstat('Computing overall joint probabilitiy distribution.');
+                end
+                fullJointProbTensor = zeros(szArr);
+                domain = cell(szArr);
+                idxsOutput = cell(1,numel(szArr));
+                for ii=1:prod(szArr)
+                    [idxsOutput{:}] = ind2sub(szArr,ii);
+                    idxsMat = cell2mat(idxsOutput);
+                    prob = 1;
+                    domainVec = zeros(1,numPairwiseProbsToCompute+1);
+                    for jj=1:numPairwiseProbsToCompute
+                        pairwiseJoint = pairwiseJointProbsCell{jj};
+                        xy = xyCell{jj};
+                        accessIdxVec = fliplr(idxsMat(jj:jj+1));    % flip because the pairwise joints are stored as [child/parent]
+                                                                    % and idxsMat is stored as parent/child
+                        prob = prob*pairwiseJoint(accessIdxVec(1),accessIdxVec(2));
+                        xyVec = xy{accessIdxVec(1),accessIdxVec(2)};
+                        domainVec(jj:jj+1) = fliplr(xyVec);
+                    end
+                    fullJointProbTensor(ii) = prob;
+                    domain{ii} = domainVec;
+                end
+
+                % apply the given variables
+                if(obj.VERBOSE_MODE)
+                    dispstat('Applying given variables.');
+                end
+                outputTensor = fullJointProbTensor;
+                idxsToRemove = zeros(1,length(givenNodesIdxsPathSubset));
+                for ii=1:length(givenNodesIdxsPathSubset)
+                    givenNodeIdx = givenNodesIdxsPathSubset(ii);
+                    givenNodeVal = givenVals(ii);
+                    % find ii in the dag-chain vec to determine which index in
+                    % our fullJoint we need to access .. this determines which
+                    % of the (:,:,:,...:) into which we need to put a specific
+                    % number is
+                    fullJointSliceDim = find(dagChainVec==givenNodeIdx);
+
+                    % find which index coresponds to the given value 
+                    % this determines what the number is that we need to put
+                    % into the indexing
+                    withinSliceIdx = obj.empInfo{givenNodeIdx}.findClosestDomainVal(givenNodeVal);
+
+                    %%%%%%% EXAMPLE %%%%%
+                    % suppose fullJointProbTensor = [25 x 25 x 25 x 25]
+                    % fullJointSliceIdx = 2
+                    % withinSliceIdx = 15, then, we whould slice as:
+                    %  fullJointProbTensor(:,15,:,:) to get the
+                    %  probability given a variable
+
+                    % slice out the correct index
+                    outputTensor = slice(outputTensor, withinSliceIdx, fullJointSliceDim);
+
+                    % remove dimensions from the domain cell-array to maintain
+                    % consistency between data and the corresponding reference
+                    % point
+                    domain = slice(domain, withinSliceIdx, fullJointSliceDim);
+                    idxsToRemove(ii) = fullJointSliceDim;
+                end
+
+                % integrate out nuisance variables
+                if(obj.VERBOSE_MODE)
+                    dispstat('Integrating out nuisance variables.');
+                end
+                nodesToIntegrateOut = setdiff(dagChainVec,requestedNodesIdxsPathSubset);
+                nodesToIntegrateOut = setdiff(nodesToIntegrateOut, givenNodesIdxsPathSubset);
+                idxsToRemove = [idxsToRemove zeros(1,length(nodesToIntegrateOut))];
+                for ii=1:length(nodesToIntegrateOut)
+                    nodeToIntegrateOut = nodesToIntegrateOut(ii);
+
+                    % the ii-1 is to allow for the fact that every-time we sum
+                    % across a dimension, we reduce the dimension of the tensor
+                    % by 1
+                    dimToIntegrate = find(dagChainVec==nodeToIntegrateOut);
+                    outputTensor = sum(outputTensor,dimToIntegrate);
+
+                    % remove dimensions from the domain cell-array to maintain
+                    % consistency between data and the corresponding reference
+                    % point
+                    domain = slice(domain, 1, dimToIntegrate);
+                    idxsToRemove(ii+length(givenNodesIdxsPathSubset)) = dimToIntegrate;
+                end
+
+                % squeeze dimensions
+                % we squeeze at the end so that we can use the same indexing
+                % values above
+                prob = squeeze(outputTensor);
+                idxToKeepVec = setdiff(1:length(dagChainVec),idxsToRemove);
+                domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
+                domain = squeeze(domain);
+
+                % normalize probability
+                if(obj.VERBOSE_MODE)
+                    dispstat('Re-normalizing probabilities.');
+                end
+                if(nargin>4)
+                    if(normalizeProbFlag)
+                        prob = prob ./ sum(prob(:));
+                    end
                 else
-                    numNodesTmp = -999;
-                end
-                numNodesTmp = numNodesTmp + 1;
-                if(numNodesTmp>numNodes)
-                    numNodes = numNodesTmp;
-                    dagChainVec = dagChainVecTmp;
-                end
-            end
-            if(isempty(dagChainVec))
-                error('No Path found between the requested and given nodes!');
-            end
-            
-            szArr = zeros(1,numNodes);
-            % make the DAG chain & get create the tensor dimensions
-            for ii=1:numNodes
-                szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
-            end
-            numPairwiseProbsToCompute = numNodes-1;
-            
-            pairwiseJointProbsCell = cell(1,numPairwiseProbsToCompute);
-            xyCell = cell(1,numPairwiseProbsToCompute);
-            % compute pairwise joint probabilities
-            if(obj.VERBOSE_MODE)
-                dispstat(sprintf('Computing %d pairwise probabilities.', numPairwiseProbsToCompute));
-            end
-            for ii=1:numPairwiseProbsToCompute
-                childNode = dagChainVec(ii+1);
-                parentNode = dagChainVec(ii);
-                [pairwiseJointProbsCell{ii}, xyCell{ii}] = obj.computePairwiseJoint(childNode, parentNode);
-            end
-            
-            % compute overall joint
-            % TODO: is there a more efficient way to do this w/ matrix
-            % operations?  I would think so ...
-            if(obj.VERBOSE_MODE)
-                dispstat('Computing overall joint probabilitiy distribution.');
-            end
-            fullJointProbTensor = zeros(szArr);
-            domain = cell(szArr);
-            idxsOutput = cell(1,numel(szArr));
-            for ii=1:prod(szArr)
-                [idxsOutput{:}] = ind2sub(szArr,ii);
-                idxsMat = cell2mat(idxsOutput);
-                prob = 1;
-                domainVec = zeros(1,numPairwiseProbsToCompute+1);
-                for jj=1:numPairwiseProbsToCompute
-                    pairwiseJoint = pairwiseJointProbsCell{jj};
-                    xy = xyCell{jj};
-                    accessIdxVec = fliplr(idxsMat(jj:jj+1));    % flip because the pairwise joints are stored as [child/parent]
-                                                                % and idxsMat is stored as parent/child
-                    prob = prob*pairwiseJoint(accessIdxVec(1),accessIdxVec(2));
-                    xyVec = xy{accessIdxVec(1),accessIdxVec(2)};
-                    domainVec(jj:jj+1) = fliplr(xyVec);
-                end
-                fullJointProbTensor(ii) = prob;
-                domain{ii} = domainVec;
-            end
-            
-            % apply the given variables
-            if(obj.VERBOSE_MODE)
-                dispstat('Applying given variables.');
-            end
-            outputTensor = fullJointProbTensor;
-            idxsToRemove = zeros(1,length(givenNodesIdxs));
-            for ii=1:length(givenNodesIdxs)
-                givenNodeIdx = givenNodesIdxs(ii);
-                givenNodeVal = givenVals(ii);
-                % find ii in the dag-chain vec to determine which index in
-                % our fullJoint we need to access .. this determines which
-                % of the (:,:,:,...:) into which we need to put a specific
-                % number is
-                fullJointSliceDim = find(dagChainVec==givenNodeIdx);
-                
-                % find which index coresponds to the given value 
-                % this determines what the number is that we need to put
-                % into the indexing
-                withinSliceIdx = obj.empInfo{givenNodeIdx}.findClosestDomainVal(givenNodeVal);
-                
-                %%%%%%% EXAMPLE %%%%%
-                % suppose fullJointProbTensor = [25 x 25 x 25 x 25]
-                % fullJointSliceIdx = 2
-                % withinSliceIdx = 15, then, we whould slice as:
-                %  fullJointProbTensor(:,15,:,:) to get the
-                %  probability given a variable
-                
-                % slice out the correct index
-                outputTensor = slice(outputTensor, withinSliceIdx, fullJointSliceDim);
-                
-                % remove dimensions from the domain cell-array to maintain
-                % consistency between data and the corresponding reference
-                % point
-                domain = slice(domain, withinSliceIdx, fullJointSliceDim);
-                idxsToRemove(ii) = fullJointSliceDim;
-            end
-            
-            % integrate out nuisance variables
-            if(obj.VERBOSE_MODE)
-                dispstat('Integrating out nuisance variables.');
-            end
-            nodesToIntegrateOut = setdiff(dagChainVec,requestedNodesIdxs);
-            nodesToIntegrateOut = setdiff(nodesToIntegrateOut, givenNodesIdxs);
-            idxsToRemove = [idxsToRemove zeros(1,length(nodesToIntegrateOut))];
-            for ii=1:length(nodesToIntegrateOut)
-                nodeToIntegrateOut = nodesToIntegrateOut(ii);
-                
-                % the ii-1 is to allow for the fact that every-time we sum
-                % across a dimension, we reduce the dimension of the tensor
-                % by 1
-                dimToIntegrate = find(dagChainVec==nodeToIntegrateOut);
-                outputTensor = sum(outputTensor,dimToIntegrate);
-                
-                % remove dimensions from the domain cell-array to maintain
-                % consistency between data and the corresponding reference
-                % point
-                domain = slice(domain, 1, dimToIntegrate);
-                idxsToRemove(ii+length(givenNodesIdxs)) = dimToIntegrate;
-            end
-            
-            % squeeze dimensions
-            % we squeeze at the end so that we can use the same indexing
-            % values above
-            prob = squeeze(outputTensor);
-            idxToKeepVec = setdiff(1:length(dagChainVec),idxsToRemove);
-            domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
-            domain = squeeze(domain);
-            
-            % normalize probability
-            if(obj.VERBOSE_MODE)
-                dispstat('Re-normalizing probabilities.');
-            end
-            if(nargin>4)
-                if(normalizeProbFlag)
+                    % by default normalize
                     prob = prob ./ sum(prob(:));
                 end
-            else
-                % by default normalize
-                prob = prob ./ sum(prob(:));
+                if(obj.VERBOSE_MODE)
+                    dispstat(' ');
+                end
+                
+                probCell{kk} = prob;
+                domainCell{kk} = domain;
             end
-            if(obj.VERBOSE_MODE)
-                dispstat(' ');
-            end
+            
+            % now we flatten the probCell and domainCell into one
+            % probability matrix and one domain cell array
+            %%%%%%%%%%%% TODO %%%%%%%%%%%%%%%%%
+            probOut = probCell{1};
+            domainOut = domainCell{1};
+            
+            
         end
-        
     end
 end
