@@ -120,5 +120,9 @@ hcbnObj.setVerbose(1);
 requestedNodes = [3,4];
 givenNodes = [];
 givenValues = [1];
+% [inference1,domain1] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);
 
-[inference,domain] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);
+% across 2 trees
+requestedNodes = [3,12];
+givenNodes = [];
+[inference2,domain2] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);
