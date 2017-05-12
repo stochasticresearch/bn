@@ -71,7 +71,7 @@ test_data  = x_test.data(:,2:end);
 discreteIdxs = importdata(discreteIdxsFile)' + 1;   % +1 to reindex w/ python
                                                
 colheaders = x_train.colheaders(2:end);
-K = 10;
+K = 25;
 verboseFlag = 1;
 
 discreteNodesNames = cell(1,length(discreteIdxs));
@@ -102,11 +102,12 @@ end
 dag_file = fullfile(outFolder, 'kddcup.learned.dag.mat');
 load(dag_file);
 hcbnObj.setVerbose(1);
+normalizeFlag = 1;
 
 % % plot the grpah
-% bg = digraph(hcbnObj.dag_topoSorted,hcbnObj.nodeNames);
-% dolayout(bg);
-% view(bg)
+bg = biograph(hcbnObj.dag_topoSorted,hcbnObj.nodeNames);
+dolayout(bg);
+view(bg)
 
 % % % now -- compute the likelihood of the model, given the data
 % % totalLL = hcbnObj.dataLogLikelihood(test_data);
@@ -117,12 +118,52 @@ hcbnObj.setVerbose(1);
 %givenNodes = {colnames{6}, colnames{8}}
 
 % within 1 tree
-requestedNodes = [3,4];
-givenNodes = [];
-givenValues = [1];
-% [inference1,domain1] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);
+% requestedNodes = [3,4];
+% givenNodes = [];
+% givenValues = [1];
+% [inference1,domain1] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+% 
+% % across 2 trees
+% requestedNodes = [3,12];
+% givenNodes = [];
+% [inference2,domain2] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
 
-% across 2 trees
-requestedNodes = [3,12];
-givenNodes = [];
-[inference2,domain2] = hcbnObj.inference(requestedNodes, givenNodes, givenValues);
+requestedNodes = {'class_label','count'};
+givenNodes = []; givenValues = [];
+[inference1,domain1,names1] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference1,domain1,names1);
+
+requestedNodes = {'count','srv_count'};
+givenNodes = []; givenValues = [];
+[inference2,domain2,names2] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference2,domain2,names2);
+
+requestedNodes = {'srv_count','dst_host_same_src_port_rate'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);
+
+requestedNodes = {'dst_host_same_src_port_rate','src_bytes'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);
+
+requestedNodes = {'src_bytes','dst_host_diff_srv_rate'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);
+
+requestedNodes = {'dst_host_diff_srv_rate','dst_host_same_srv_rate'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);
+
+requestedNodes = {'dst_host_same_srv_rate','dst_host_srv_count'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);
+
+requestedNodes = {'dst_host_srv_count','diff_srv_rate'};
+givenNodes = []; givenValues = [];
+[inference,domain,names] = hcbnObj.inference(requestedNodes, givenNodes, givenValues, normalizeFlag);
+hcbn_heatmap(inference,domain,names);

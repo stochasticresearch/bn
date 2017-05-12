@@ -65,6 +65,8 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
         
         PSEUDO_OBS_CALC_METHOD;     % should be either RANK or ECDF
         VERBOSE_MODE;
+
+        MIN_PROB;
     end
     
     methods
@@ -93,6 +95,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 end
             end
             obj.LOG_CUTOFF = 10^-5;
+            obj.MIN_PROB = .001;
             
             obj.PSEUDO_OBS_CALC_METHOD = 'RANK';    % can be either RANK or ECDF
             
@@ -233,6 +236,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % reorder all the data and arrays according to the
             % topologically sorted order
             obj.nodeNames = obj.nodeNames(n);
+            obj.nodeVals = obj.nodeVals(n);
             obj.empInfo = obj.empInfo(n);
             
             % reorder the internal data
@@ -689,7 +693,8 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             prob = prob/sum(prob(:));
         end
         
-        function [probOut, domainOut] = inference(obj, requestedNodes, givenNodes, givenVals, normalizeProbFlag)
+        function [probOut, domainOut, nodeNamesOut] = ...
+            inference(obj, requestedNodes, givenNodes, givenVals, normalizeProbFlag)
             % Performs inference on the HCBN, given a certain number of
             % nodes for the requested nodes.  Requested Nodes and Given
             % Nodes can both be provided as either indices, or names.
@@ -729,6 +734,8 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 givenNodesIdxs = givenNodes;
             end
             
+            nodeNamesOut = cell(1,length(requestedNodes));
+            nodeNamesOutIdx = 1;
             % compute the maximum number of nodes we need to compute the
             % joint probability for
             paths = findPaths(obj.dag_topoSorted, requestedNodesIdxs, givenNodesIdxs);
@@ -749,6 +756,10 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                 % make the DAG chain & get create the tensor dimensions
                 for ii=1:numNodes
                     szArr(ii) = length(obj.empInfo{dagChainVec(ii)}.domain);
+                    if(any(ismember(requestedNodes,obj.nodeNames{dagChainVec(ii)})))
+                        nodeNamesOut{nodeNamesOutIdx} = obj.nodeNames{dagChainVec(ii)};
+                        nodeNamesOutIdx = nodeNamesOutIdx + 1;
+                    end
                 end
                 numPairwiseProbsToCompute = numNodes-1;
 
@@ -778,7 +789,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     % TODO: is there a more efficient way to do this w/ matrix
                     % operations?  I would think so ...
                     if(obj.VERBOSE_MODE)
-                        dispstat('Computing overall joint probabilitiy distribution.');
+                        dispstat('Computing overall joint probability distribution.');
                     end
                     fullJointProbTensor = zeros(szArr);
                     domain = cell(szArr);
@@ -868,6 +879,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     idxToKeepVec = setdiff(1:length(dagChainVec),idxsToRemove);
                     domain = cellfun(@(x) x(idxToKeepVec), domain, 'UniformOutput', false);
                     domain = squeeze(domain);
+
+                    % don't allow zero probability
+                    prob(prob==0) = obj.MIN_PROB;
 
                     probCell{kk} = prob;
                     domainCell{kk} = domain;

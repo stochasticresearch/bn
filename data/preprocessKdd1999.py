@@ -8,7 +8,7 @@ import pandas as pd
 import csv
 
 def preprocess(inFile,outFile):
-    numDiscreteCutOff = 3
+    numDiscreteCutOff = 5
     namesVec = [
                 'duration', 
                 'protocol_type',
@@ -58,7 +58,7 @@ def preprocess(inFile,outFile):
     label_mapping = {}
     
     # TODO: get this from the .names file
-    discreteIdxs = [1,2,3,6,11,20,21,41]
+    discreteIdxs = [1,2,3,6,11,20,21,41]        # this is 0 based
     colsToTransform = []
     for ii in range(len(discreteIdxs)):
         colsToTransform.append(namesVec[discreteIdxs[ii]])
@@ -67,10 +67,9 @@ def preprocess(inFile,outFile):
     for col in colsToTransform:
         x[col], label_mapping[col] = pd.factorize(x[col].astype('category'))
 
-    # write the data back out after randomely sampling, b/c we have a
-    # TON of data, and don't want to spend forever processing this data
-    y_train = x.sample(n=10000, replace=False)
-    y_test =  x.sample(n=10000, replace=False)
+    # grab a subset to process
+    y_train = x.sample(n=100000, replace=False)
+    y_test =  x.sample(n=100000, replace=False)
 
     # figure out which columns should be dropped because they only have 1 realization 
     # of a feature
@@ -90,6 +89,7 @@ def preprocess(inFile,outFile):
     for ii in range(len(discreteIdxsDropped)):
         newDiscreteIdxsRemapped.append(y_train.columns.get_loc(namesVec[discreteIdxsDropped[ii]]))
 
+    # only keep data with non-zero values for certain columns
     print('Original Discrete Idxs=' + str(discreteIdxs))
     print('Dropped=' + str(colsToDrop))
     print('Discrete Idxs after dropped=' + str(discreteIdxsDropped))
