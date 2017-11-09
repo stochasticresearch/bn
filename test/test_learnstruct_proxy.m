@@ -22,7 +22,7 @@ clc;
 dbstop if error;
 
 % Read in a data-set
-dataFolder = '/Users/kiran/Documents/data/wine_quality';
+dataFolder = '/data/winequality';
 train_dataFile = fullfile(dataFolder, 'winequality-red.csv');
 
 % ensure dataset is all numeric, and convert categorical data to numeric

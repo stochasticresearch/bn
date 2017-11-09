@@ -60,6 +60,8 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         % discrete random variables
         discNodeIdxs;   % the indices of of the nodes of the discrete
                         % random variables
+        PROXY_COMPUTATION_METHOD; % variable which indicates which measure
+                                  % we use to compute LL proxy
                         
         LOG_CUTOFF;
         
@@ -98,6 +100,7 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             obj.MIN_PROB = .001;
             
             obj.PSEUDO_OBS_CALC_METHOD = 'RANK';    % can be either RANK or ECDF
+            obj.PROXY_COMPUTATION_METHOD = 'srho';  % can be either srho, tau or cim
             
             obj.D = size(X,2);      
             
@@ -159,6 +162,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     estimateCop = 1;    % flag allows us to toposort & estimate the copula
                     obj.setDag(candidateDag, estimateCop);
                 end
+            end
+            if(nVarargs>2)
+                obj.PROXY_COMPUTATION_METHOD = varargin{3};
             end
             
             dispstat(sprintf('HCBN Initialization complete!'),'keepthis','timestamp');
@@ -464,15 +470,15 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                         dataX = obj.X_xform(:,dd);
                         dataY = obj.X_xform(:,parentIdx);
                         
-                        % compute the proxy to Likelihood.  Because we are
-                        % using the X_xform dataset, we know that if the
-                        % data is continuous, we will compute CIM and if
-                        % the data is hybrid or discrete, we will
-                        % automatically compute CIM_S, which was shown in
-                        % the paper: https://arxiv.org/abs/1703.06686 to
-                        % satisfy DPI
-                        %score_proxy = cim(dataX, dataY);
-                        score_proxy = abs(corr(dataX,dataY,'type','Spearman'));
+                        if(strcmpi(obj.PROXY_COMPUTATION_METHOD,'srho'))
+                            score_proxy = abs(corr(dataX,dataY,'type','Spearman'));
+                        elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'ktau'))
+                            score_proxy = abs(corr(dataX,dataY,'type','Kendall'));
+                        elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'cim'))
+                            score_proxy = cim(dataX,dataY);
+                        else
+                            error('Invalid Proxy Computation Method!');
+                        end
                         ll_proxy_val = ll_proxy_val + score_proxy;
                     end
                 end
