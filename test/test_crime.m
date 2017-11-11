@@ -56,13 +56,20 @@ verboseFlag = 1;
 srhoProxy = 'srho';
 cimProxy  = 'cim';
 
+%% run the srho proxy
 hcbnSrhoObj = hcbn_k1(x_train, colHeaders, [], K, verboseFlag, 'learn', srhoProxy);
 srhoLL = hcbnSrhoObj.copulaLogLikelihood(x_test);
 
-hcbnCimObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', cimProxy);
+save(fullfile(dataFolder,'crime_results_srho.mat'));
+
+%% run the cim proxy
+hcbnCimObj = hcbn_k1(x_train, colHeaders, [], K, verboseFlag, 'learn', cimProxy);
 cimLL = hcbnCimObj.copulaLogLikelihood(x_test);
 
-fprintf('LL[sRho]=%0.02f LL[CIM]=%0.02f\n', ...
-    srhoLL, cimLL);
+save(fullfile(dataFolder,'crime_results_cim.mat'));
 
-save(fullfile(dataFolder,'crime_results.mat'));
+%% Compare the LL's
+load(fullfile(dataFolder,'crime_results_srho.mat'));
+load('/home/kiran/ownCloud/PhD/sim_results/crime/crime_results_cim.mat');
+
+fprintf('LL[sRho]=%0.02f LL[CIM]=%0.02f\n', srhoLL, cimLL);

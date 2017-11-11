@@ -143,7 +143,10 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
             % rearrange the cell-array produced by this function
             % appropriately
             obj.calcEmpInfo();
-            
+
+            if(nVarargs>2)
+                obj.PROXY_COMPUTATION_METHOD = varargin{3};
+            end
             if(nVarargs>1)
                 if(ischar(varargin{2}))
                     % assume it is just a flag and we attempt to perform
@@ -163,11 +166,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                     obj.setDag(candidateDag, estimateCop);
                 end
             end
-            if(nVarargs>2)
-                obj.PROXY_COMPUTATION_METHOD = varargin{3};
+            if(obj.VERBOSE_MODE)
+                dispstat(sprintf('HCBN Initialization complete!'),'keepthis','timestamp');
             end
-            
-            dispstat(sprintf('HCBN Initialization complete!'),'keepthis','timestamp');
         end
         
         function [] = setVerbose(obj, mode)
@@ -474,8 +475,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                             score_proxy = abs(corr(dataX,dataY,'type','Spearman'));
                         elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'ktau'))
                             score_proxy = abs(corr(dataX,dataY,'type','Kendall'));
-                        elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'cim'))
-                            score_proxy = cim(dataX,dataY);
+                        elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'taukl'))
+                            [u,v] = pobs_sorted_cc(obj.X(:,dd),obj.X(:,parentIdx));
+                            score_proxy = abs(taukl_cc(u,v));
                         else
                             error('Invalid Proxy Computation Method!');
                         end

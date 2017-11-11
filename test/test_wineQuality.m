@@ -24,34 +24,51 @@ dbstop if error;
 % Read in a data-set
 dataFolder = '/data/winequality';
 dataFile = fullfile(dataFolder, 'winequality-red.csv');
-dataFile = fullfile(dataFolder, 'winequality-white.csv');
 
 % ensure dataset is all numeric, and convert categorical data to numeric
 x = importdata(dataFile,';');
 
-rng(12345);
 trainRatio = 0.7; valRatio = 0.00; testRatio = 0.3;
-[trainInd,valInd,testInd] = dividerand(size(x.data,1),trainRatio,valRatio,testRatio);
-
-x_train = x.data(trainInd,:);
-x_test  = x.data(testInd,:);
 
 % learn structure
 discreteNodes = [];
 K = 100;
-verboseFlag = 1;
+verboseFlag = 0;
 
 srhoProxy = 'srho';
-cimProxy  = 'cim';
+tauProxy  = 'ktau';
+tauklProxy = 'taukl';
 
-hcbnSrhoObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', srhoProxy);
-srhoLL = hcbnSrhoObj.copulaLogLikelihood(x_test);
+numMCSims = 10;
 
-hcbnCimObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', cimProxy);
-cimLL = hcbnCimObj.copulaLogLikelihood(x_test);
+rng(12345);
+dispstat('','init'); % One time only initialization
+llVec = zeros(3,numMCSims);
+for mcSimNum=1:numMCSims
+    [trainInd,~,testInd] = dividerand(size(x.data,1),trainRatio,valRatio,testRatio);
+    x_train = x.data(trainInd,:);
+    x_test  = x.data(testInd,:);
 
-fprintf('LL[sRho]=%0.02f LL[CIM]=%0.02f\n', ...
-    srhoLL, cimLL);
+    hcbnSrhoObj  = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', srhoProxy);
+    hcbnKTauObj  = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauProxy);    
+    hcbnTauKLObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauklProxy);
+    
+%     hcbnSrhoObj.dag_topoSorted
+%     hcbnKTauObj.dag_topoSorted
+%     hcbnTauKLObj.dag_topoSorted
+    
+    srhoLL  = hcbnSrhoObj.copulaLogLikelihood(x_test);
+    kTauLL  = hcbnKTauObj.copulaLogLikelihood(x_test);
+    tauklLL = hcbnTauKLObj.copulaLogLikelihood(x_test);
+
+    llVec(1,mcSimNum) = srhoLL;
+    llVec(2,mcSimNum) = kTauLL;
+    llVec(3,mcSimNum) = tauklLL;
+    
+    dispstat(sprintf('{%d} LL[sRho]=%0.02f LL[tau]=%0.02f LL[tau_KL]=%0.02f', ...
+                      mcSimNum, srhoLL, kTauLL, tauklLL),'keepthis','timestamp');
+end
+
 
 %% Process the White Wine-Quality Dataset
 clear;
@@ -78,13 +95,17 @@ K = 100;
 verboseFlag = 1;
 
 srhoProxy = 'srho';
-cimProxy  = 'cim';
+tauProxy  = 'ktau';
+tauklProxy  = 'taukl';
 
 hcbnSrhoObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', srhoProxy);
 srhoLL = hcbnSrhoObj.copulaLogLikelihood(x_test);
 
-hcbnCimObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', cimProxy);
-cimLL = hcbnCimObj.copulaLogLikelihood(x_test);
+hcbnKTauObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauProxy);
+kTauLL = hcbnKTauObj.copulaLogLikelihood(x_test);
 
-fprintf('LL[sRho]=%0.02f LL[CIM]=%0.02f\n', ...
-    srhoLL, cimLL);
+hcbnTauKLObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauklProxy);
+tauklLL = hcbnTauKLObj.copulaLogLikelihood(x_test);
+
+fprintf('LL[sRho]=%0.02f LL[tau]=%0.02f LL[tau_KL]=%0.02f\n', ...
+    srhoLL, kTauLL, tauklLL);

@@ -95,17 +95,26 @@ while ~done
         dispstat(sprintf('iter=%d Max Score=%0.02f',iter, maxScore),'keepthis', 'timestamp');
     end
 end
-dispstat('Structure Learning complete!','keepthis','timestamp');
+if(verboseFlag)
+    dispstat('Structure Learning complete!','keepthis','timestamp');
+end
 
 % topo-sort the DAG, and associated data
 % match the topologically sorted DAG
-dispstat('Topologically Sorting DAG!', 'keepthis', 'timestamp');
+if(verboseFlag)
+    dispstat('Topologically Sorting DAG!', 'keepthis', 'timestamp');
+end
 dagModelObj.doToposorting();
 
 % now that structure learning is complete, estimate the copula family
 % objects
-dispstat('Learning Copula Families and Parameters!', 'keepthis', 'timestamp');
+if(verboseFlag)
+    dispstat('Learning Copula Families and Parameters!', 'keepthis', 'timestamp');
+end
 dagModelObj.estFamilyCopula();
-dispstat('Learning complete!', 'keepthis', 'timestamp');
+
+if(verboseFlag)
+    dispstat('Learning complete!', 'keepthis', 'timestamp');
+end
 
 end
