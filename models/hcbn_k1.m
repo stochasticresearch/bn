@@ -477,7 +477,9 @@ classdef hcbn_k1 < handle & matlab.mixin.Copyable
                             score_proxy = abs(corr(dataX,dataY,'type','Kendall'));
                         elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'taukl'))
                             [u,v] = pobs_sorted_cc(obj.X(:,dd),obj.X(:,parentIdx));
-                            score_proxy = abs(taukl_cc(u,v));
+                            score_proxy = abs(taukl_cc(u,v,0,0,1));
+                        elseif(strcmpi(obj.PROXY_COMPUTATION_METHOD,'cim'))
+                            score_proxy = abs(cim(dataX,dataY,0.015625,0.2,0,0,0));
                         else
                             error('Invalid Proxy Computation Method!');
                         end

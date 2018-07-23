@@ -38,12 +38,13 @@ verboseFlag = 0;
 srhoProxy = 'srho';
 tauProxy  = 'ktau';
 tauklProxy = 'taukl';
+cimProxy   = 'cim';
 
 numMCSims = 10;
 
 rng(12345);
 dispstat('','init'); % One time only initialization
-llVec = zeros(3,numMCSims);
+llVec = zeros(4,numMCSims);
 for mcSimNum=1:numMCSims
     [trainInd,~,testInd] = dividerand(size(x.data,1),trainRatio,valRatio,testRatio);
     x_train = x.data(trainInd,:);
@@ -52,6 +53,7 @@ for mcSimNum=1:numMCSims
     hcbnSrhoObj  = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', srhoProxy);
     hcbnKTauObj  = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauProxy);    
     hcbnTauKLObj = hcbn_k1(x_train, x.colheaders, [], K, verboseFlag, 'learn', tauklProxy);
+    hcbnCIMObj = hcbn_k1(x_train, x.colheaders, [], K, 1, 'learn', cimProxy);
     
 %     hcbnSrhoObj.dag_topoSorted
 %     hcbnKTauObj.dag_topoSorted
@@ -60,13 +62,15 @@ for mcSimNum=1:numMCSims
     srhoLL  = hcbnSrhoObj.copulaLogLikelihood(x_test);
     kTauLL  = hcbnKTauObj.copulaLogLikelihood(x_test);
     tauklLL = hcbnTauKLObj.copulaLogLikelihood(x_test);
+    cimLL   = hcbnCIMObj.copulaLogLikelihood(x_test);
 
     llVec(1,mcSimNum) = srhoLL;
     llVec(2,mcSimNum) = kTauLL;
     llVec(3,mcSimNum) = tauklLL;
+    llVec(4,mcSimNum) = cimLL;
     
-    dispstat(sprintf('{%d} LL[sRho]=%0.02f LL[tau]=%0.02f LL[tau_KL]=%0.02f', ...
-                      mcSimNum, srhoLL, kTauLL, tauklLL),'keepthis','timestamp');
+    dispstat(sprintf('{%d} LL[sRho]=%0.02f LL[tau]=%0.02f LL[tau_KL]=%0.02f LL[CIM]=%0.02f', ...
+                      mcSimNum, srhoLL, kTauLL, tauklLL, cimLL),'keepthis','timestamp');
 end
 
 
